@@ -1,0 +1,54 @@
+name: linux-x86
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # No rust-toolchain action, no rust-cache: rustup ships pre-
+      # installed on the GH runner image and the first `cargo` call
+      # auto-installs nightly + rust-src per rust-toolchain.toml.
+      # (Rationale in commits ea7f75e and f402f6e.)
+      - name: Install libnvidia-ml.so.1 stub
+        # Fakes the library just enough for the linker. Only the symbol
+        # names matter; the stub is never executed — the RM tests are
+        # cfg_attr(not(has_gpu), ignore) and stay ignored on runners
+        # without /dev/nvidiactl.
+        run: |
+          sudo gcc -shared -fPIC -Wl,-soname,libnvidia-ml.so.1 \
+              -o /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 \
+              tools/nvml_stub.c
+      - name: Build (default release profile, glibc dynamic)
+        run: cargo build --release
+      - name: Build min-stack + --check smoke test
+        # `cargo stack` produces target/static-linux-x86_64/min-stack/ltop,
+        # which tests/stack_frames.rs consumes. Must run before
+        # `cargo test`. The same binary doubles as a smoke test for the
+        # libc-free entry path (same codegen as the shipped `min`
+        # profile — they differ only in strip/debug metadata).
+        run: |
+          cargo stack
+          ./target/static-linux-x86_64/min-stack/ltop --check
+      - name: Build min + --check smoke test
+        # Materialises target/static-linux-x86_64/min/ltop, the shipped
+        # production binary. tests/footprint.rs reads its file size and
+        # asserts it stays under the README's documented threshold.
+        # `--check` exits cleanly without taking over the terminal.
+        run: |
+          cargo ltop -- --check
+          ls -la target/static-linux-x86_64/min/ltop
+      - name: Install via `cargo ltop --install` + smoke test
+        # Exercises the install path end-to-end. CARGO_INSTALL_ROOT
+        # redirects the copy to a scratch dir (never ~/.cargo/bin).
+        # Assert the installed file is byte-identical to the min binary
+        # the footprint test checks, and that it actually runs.
+        env:
+          CARGO_INSTALL_ROOT: ${{ runner.temp }}/install
+        run: |
+          cargo ltop --install
+          test -x "$CARGO_INSTALL_ROOT/bin/ltop"
+          cmp target/static-linux-x86_64/min/ltop "$CARGO_INSTALL_ROOT/bin/ltop"
+          [ "$("$CARGO_INSTALL_ROOT/bin/ltop" --check)" = "ok" ]
+      - name: Test (unit + bin + doc + compile_fail + stack_frames + footprint)
+        run: cargo test --release

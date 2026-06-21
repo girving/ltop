@@ -1,0 +1,138 @@
+name: mac-arm
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  build:
+    # macos-14 and later are Apple-silicon (aarch64). The macOS path
+    # doesn't need the libnvidia-ml stub: build.rs searches Linux
+    # library paths only, so `has_nvml` stays unset and no NVML
+    # symbols enter the link. There's also no `cargo stack` stage —
+    # that builds the `static-linux-aarch64` custom target, which
+    # would require a Linux cross-toolchain we don't install here.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      # rustup + nightly + rust-src auto-install on the first cargo
+      # call via rust-toolchain.toml, same as the Linux workflows.
+      - name: Build (default release profile, libc dynamic)
+        run: cargo build --release
+      - name: Report default release binary size
+        run: ls -l target/release/ltop && size target/release/ltop
+      - name: Build + --once smoke test (min profile via cargo ltop)
+        # `cargo ltop` dispatches xtask, which picks the right target
+        # for the host (aarch64-apple-darwin here) and applies min
+        # profile + build-std + panic_abort. Exercises the macOS
+        # collect_procs path end-to-end: sysctl, libproc,
+        # host_statistics64, and rendering one frame. Runs *before*
+        # `cargo test --release` so tests/footprint.rs finds the min
+        # binary and can assert its size against the README threshold.
+        run: cargo ltop -- --once
+      - name: Install via `cargo ltop --install` + smoke test
+        # Exercises the install path end-to-end on macOS, where xtask
+        # also re-packs the Mach-O (mac-pack is idempotent — a second
+        # pack sees the already-1-page __TEXT and passes through).
+        # CARGO_INSTALL_ROOT redirects the copy to a scratch dir.
+        # Assert the installed file matches the min binary the footprint
+        # test checks, and that it runs.
+        env:
+          CARGO_INSTALL_ROOT: ${{ runner.temp }}/install
+        run: |
+          cargo ltop --install
+          test -x "$CARGO_INSTALL_ROOT/bin/ltop"
+          cmp target/aarch64-apple-darwin/min/ltop "$CARGO_INSTALL_ROOT/bin/ltop"
+          [ "$("$CARGO_INSTALL_ROOT/bin/ltop" --check)" = "ok" ]
+      - name: Test (unit + bin + doc + compile_fail + footprint)
+        # Parity tests for our raw Darwin syscalls and Mach traps vs
+        # libSystem; the new tests/footprint.rs asserts the min
+        # binary built above stays under the README's 32.6 KB cap.
+        # `stack_frames` tests that require a `min-stack` binary skip
+        # cleanly (load_min_stack() returns None) since we don't
+        # build one here; Linux-only tests are cfg-gated out.
+        run: cargo test --release
+      - name: Report min binary size
+        run: |
+          ls -l target/aarch64-apple-darwin/min/ltop
+          size target/aarch64-apple-darwin/min/ltop
+      - name: Report Mach-O structure (min binary)
+        run: |
+          echo "── Dylib dependencies ──"
+          otool -L target/aarch64-apple-darwin/min/ltop
+          echo "── Segment + section sizes ──"
+          size -m target/aarch64-apple-darwin/min/ltop
+          echo "── Load commands (full) ──"
+          otool -l target/aarch64-apple-darwin/min/ltop | head -200
+          echo "── File offsets of segments ──"
+          otool -l target/aarch64-apple-darwin/min/ltop | \
+              grep -A2 "segname\|sectname" | grep -v "^--$" | head -40
+      # mac-min.md "B0": inspect __DATA,__const content + fixups so
+      # we can decide the next size-shrinking experiment based on
+      # evidence rather than guesses. No behavior change — just
+      # extra diagnostics in the job log.
+      - name: __DATA,__const bytes (mac-min B0)
+        run: |
+          echo "── Raw bytes of __DATA,__const ──"
+          otool -s __DATA __const target/aarch64-apple-darwin/min/ltop | head -60 || true
+          echo "── Section dump via objdump (may be absent on host) ──"
+          objdump -s -j __DATA,__const target/aarch64-apple-darwin/min/ltop 2>&1 | head -40 || true
+      - name: Chained fixups list (mac-min B0)
+        run: |
+          echo "── Chained-fixups header ──"
+          otool -l target/aarch64-apple-darwin/min/ltop | \
+              grep -A5 "LC_DYLD_CHAINED_FIXUPS\|LC_DYLD_INFO" || echo "(none found)"
+          echo "── Rebase/bind entries ──"
+          # `dyld_info` ships with Xcode on recent macOS; if missing
+          # the step still succeeds so we don't lose the other output.
+          dyld_info -fixups target/aarch64-apple-darwin/min/ltop 2>&1 | head -60 || true
+      - name: Symbols landing in __DATA (mac-min B0)
+        run: |
+          echo "── Symbols in __DATA segment (with sizes if available) ──"
+          nm -m target/aarch64-apple-darwin/min/ltop 2>&1 | grep -i __DATA || echo "(none)"
+          echo "── Sorted section sizes ──"
+          size -x -l -m target/aarch64-apple-darwin/min/ltop 2>&1 | head -60 || true
+      # Dump the bytes of __TEXT,__const so we can decode what each
+      # surviving __DATA,__const (ptr, len) entry points at. `otool -s`
+      # prints the 4-byte words; the strings appear inline.
+      - name: __TEXT,__const bytes (for fixup decoding)
+        run: |
+          echo "── __TEXT,__const bytes (scan for readable strings) ──"
+          otool -s __TEXT __const target/aarch64-apple-darwin/min/ltop | head -80 || true
+          echo "── strings near the __TEXT,__const region ──"
+          strings -a -n 4 target/aarch64-apple-darwin/min/ltop \
+              | head -80 || true
+      # Size-attributed function list (min-dbg; mac-min A diagnostic).
+      # Mach-O nlist has no size field, so sort symbols by address and
+      # print the delta between adjacent text symbols.
+      - name: Build min-dbg for nm analysis
+        run: cargo ltop-dbg
+      - name: Top 40 largest functions (mac-min A)
+        run: |
+          echo "── functions sorted by size (nm address-delta) ──"
+          xcrun llvm-nm --numeric-sort --radix=d \
+              target/aarch64-apple-darwin/min-dbg/ltop 2>&1 \
+            | awk '
+                $2 == "t" || $2 == "T" {
+                    if (prev) printf "%6d  %s\n", $1 - prev_addr, prev_name;
+                    prev_addr = $1; prev_name = $3; prev = 1
+                }
+              ' \
+            | sort -rn | head -40 || true
+          echo "── udivti3 / u128 presence check ──"
+          xcrun llvm-nm target/aarch64-apple-darwin/min-dbg/ltop 2>&1 \
+            | grep -iE "udivti|u128|div_rem" || echo "(none — u128 path eliminated)"
+      # Find who calls __udivti3 (u128 division) and RawVec grow_amortized
+      # (alloc crate Vec growth). llvm-objdump resolves bl targets
+      # symbolically on arm64 Mach-O, so any line containing the target
+      # symbol substring after the mnemonic is a call site; print the
+      # enclosing function header for each.
+      - name: Callers of __udivti3 / grow_amortized (mac-min A)
+        run: |
+          for needle in udivti3 grow_amortized; do
+            echo "── callers of ${needle} ──"
+            xcrun llvm-objdump -d --no-show-raw-insn \
+                target/aarch64-apple-darwin/min-dbg/ltop 2>&1 \
+              | awk -v n="$needle" '
+                  /^[0-9a-f]+ <.+>:$/ { cur = $0; shown = 0; next }
+                  $0 ~ n && !shown { print "  in " cur; shown = 1 }
+                  $0 ~ n { print "    " $0 }
+                ' | head -40
+          done

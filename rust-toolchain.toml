@@ -1,0 +1,11 @@
+[toolchain]
+# Pin nightly crate-wide. Required by the `cargo ltop` / `cargo stack`
+# aliases in `.cargo/config.toml` for `-Z build-std`,
+# `-Z build-std-features`, `-Z json-target-spec`, and the unstable
+# rustflags (`-Cpanic=immediate-abort`, `-Cforce-unwind-tables=no`,
+# …). Pinning here means all `cargo` commands in this directory use
+# nightly without a `+nightly` prefix, and rustup auto-installs the
+# toolchain + `rust-src` component on the first invocation — no
+# manual setup needed.
+channel = "nightly"
+components = ["rust-src"]

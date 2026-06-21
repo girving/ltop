@@ -1,0 +1,91 @@
+[workspace]
+members = ["tools/arena-svg", "tools/inline-bytes", "tools/mac-pack", "tools/spin", "tools/stack-svg", "tools/xtask"]
+
+# Shared [package] fields — each workspace member (main crate +
+# everything under tools/) picks these up with `.workspace = true`.
+# `license = "BSD-2-Clause"` is the SPDX identifier for the LICENSE
+# file at the repo root; `edition = "2024"` is what every crate
+# here uses already. Centralising both keeps them in one place and
+# means future-Rust-edition bumps are one-line.
+[workspace.package]
+edition = "2024"
+license = "BSD-2-Clause"
+
+[package]
+name = "ltop"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[features]
+# Dev-only: log every arena alloc / scope-rewind / uncommit to a file via
+# raw write(2). Stays no_std; used by tools/arena-svg to render a
+# space-time diagram of the arena. Zero cost when off (bump's label
+# argument DCEs, the trace module is excluded).
+arena-trace = []
+
+# Linux-only diagnostic: switch the seccomp filter's deny action from
+# KILL_PROCESS to RET_TRAP and install a SIGSYS handler that prints
+# the offending syscall number to stderr before exiting. Use when
+# investigating "ltop dies on kernel X" reports — flip the feature,
+# reproduce, see the syscall. Production should ship without this:
+# KILL_PROCESS is strictly safer (no userspace handler for a
+# corrupted process to hijack).
+sandbox-trap = []
+
+# libc is macOS-only and tests-only. Every `libc::*` reference left in
+# the tree is inside `#[cfg(test)]` blocks comparing our raw-syscall /
+# Mach-IPC paths to their libSystem reference; the production path
+# hardcodes the two Darwin ABI constants it needs (CLOCK_REALTIME,
+# CLOCK_MONOTONIC — see syscall.rs). Keeping libc here as a dev-dep
+# stops it from being linked into the shipped binary, which avoids a
+# stray LC_LOAD_DYLIB libiconv entry — libc declares
+# `#[link(name = "iconv")]` on its iconv extern blocks and ld64 has no
+# `--as-needed`, so the load command would land in the binary even
+# though we import zero symbols from it. On Linux nothing references
+# the crate, prod or test: the production path uses raw syscalls
+# (`src/syscall.rs` linux branch, `src/tty.rs` with an inlined
+# `Termios`), and the test harness / NVML reference backend don't
+# touch libc either. Gating the dep here keeps Linux -Z build-std
+# from compiling libc at all.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+libc = "0.2"
+
+# opt-level=2 in dev keeps the TUI responsive (we don't use release for day-to-day
+# building but the wrapper script below uses release).
+[profile.dev]
+opt-level = 2
+overflow-checks = false
+debug = false
+
+[profile.release]
+opt-level = 3
+# Required for `no_std`: without std there is no eh_personality lang item,
+# so unwinding panics cannot link. Our panic handler aborts anyway.
+panic = "abort"
+
+[profile.min]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Same settings as `min` but with symbols preserved, for `cargo-bloat` and nm.
+[profile.min-dbg]
+inherits = "min"
+strip = false
+
+# Stack-usage build: strip=false keeps `.stack_sizes` (metadata emitted by
+# `-Zemit-stack-sizes` via the target rustflags in .cargo/config.toml) plus
+# `.symtab`/`.strtab` so tools/stack-svg can match entries to function names.
+# debug=2 emits full DWARF, including DW_TAG_inlined_subroutine entries that
+# let tools/stack-svg decompose each function's frame into the inlined
+# callees that contributed to it (production `min` with LTO + opt-z inlines
+# aggressively, so this is the only way to see which bytes belong to which
+# source-level function).
+[profile.min-stack]
+inherits = "min"
+strip = false
+debug = 2

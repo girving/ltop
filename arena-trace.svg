@@ -1,0 +1,600 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="770" viewBox="0 0 1900 770" font-family="monospace" font-size="11">
+<rect x="0" y="0" width="1900" height="770" fill="white"/>
+<rect x="60" y="30" width="1600" height="700" fill="none" stroke="#888"/>
+<line x1="60" x2="1660" y1="730.0" y2="730.0" stroke="#eee"/>
+<text x="54" y="730.0" text-anchor="end" dominant-baseline="middle" fill="#555">0 B</text>
+<line x1="60" x2="1660" y1="555.0" y2="555.0" stroke="#eee"/>
+<text x="54" y="555.0" text-anchor="end" dominant-baseline="middle" fill="#555">6 KB</text>
+<line x1="60" x2="1660" y1="380.0" y2="380.0" stroke="#eee"/>
+<text x="54" y="380.0" text-anchor="end" dominant-baseline="middle" fill="#555">12 KB</text>
+<line x1="60" x2="1660" y1="205.0" y2="205.0" stroke="#eee"/>
+<text x="54" y="205.0" text-anchor="end" dominant-baseline="middle" fill="#555">18 KB</text>
+<line x1="60" x2="1660" y1="30.0" y2="30.0" stroke="#eee"/>
+<text x="54" y="30.0" text-anchor="end" dominant-baseline="middle" fill="#555">24 KB</text>
+<text x="60" y="16" font-size="13" fill="#222">arena timeline — 732 events, peak 24 KB, each label gets equal x-width (521 rects)</text>
+<rect x="139.65" y="382.81" width="79.65" height="231.46" fill="hsl(293, 65%, 55%)" fill-opacity="0.85"><title>osbinary/objs: [4096..12288) 8 KB @ evt 1..2</title></rect>
+<rect x="60.00" y="614.27" width="159.29" height="115.73" fill="hsl(281, 65%, 55%)" fill-opacity="0.85"><title>gpu/agx/now: [0..4096) 4 KB @ evt 0..2</title></rect>
+<rect x="259.16" y="635.97" width="79.65" height="57.86" fill="hsl(165, 65%, 55%)" fill-opacity="0.85"><title>gpu/agx/procs/raw: [1280..3328) 2 KB @ evt 4..5</title></rect>
+<rect x="498.14" y="431.41" width="79.65" height="29.16" fill="hsl(98, 65%, 55%)" fill-opacity="0.85"><title>pids_raw: [9536..10568) 1 KB @ evt 8..9</title></rect>
+<rect x="657.86" y="263.69" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [16500..16504) 4 B @ evt 12..13</title></rect>
+<rect x="657.47" y="263.80" width="0.66" height="138.67" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11592..16500) 4 KB @ evt 11..13</title></rect>
+<rect x="658.83" y="392.90" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11916..11931) 15 B @ evt 16..17</title></rect>
+<rect x="658.43" y="393.32" width="0.66" height="9.04" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11596..11916) 320 B @ evt 15..17</title></rect>
+<rect x="659.79" y="392.47" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11931..11946) 15 B @ evt 20..21</title></rect>
+<rect x="659.40" y="392.90" width="0.66" height="9.04" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11611..11931) 320 B @ evt 19..21</title></rect>
+<rect x="660.76" y="392.05" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11946..11961) 15 B @ evt 24..25</title></rect>
+<rect x="660.36" y="392.47" width="0.66" height="9.04" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11626..11946) 320 B @ evt 23..25</title></rect>
+<rect x="661.72" y="392.90" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11913..11931) 18 B @ evt 28..29</title></rect>
+<rect x="661.33" y="393.41" width="0.66" height="7.69" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11641..11913) 272 B @ evt 27..29</title></rect>
+<rect x="662.29" y="390.52" width="0.40" height="10.06" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11659..12015) 356 B @ evt 31..32</title></rect>
+<rect x="663.12" y="392.98" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11915..11928) 13 B @ evt 34..35</title></rect>
+<rect x="662.73" y="393.35" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11659..11915) 256 B @ evt 33..35</title></rect>
+<rect x="664.09" y="392.30" width="0.40" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11932..11952) 20 B @ evt 38..39</title></rect>
+<rect x="663.69" y="392.87" width="0.66" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11672..11932) 260 B @ evt 37..39</title></rect>
+<rect x="665.05" y="396.18" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11808..11815) 7 B @ evt 42..43</title></rect>
+<rect x="664.66" y="396.37" width="0.66" height="3.28" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11692..11808) 116 B @ evt 41..43</title></rect>
+<rect x="666.02" y="389.99" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12019..12034) 15 B @ evt 46..47</title></rect>
+<rect x="665.62" y="390.41" width="0.66" height="9.04" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11699..12019) 320 B @ evt 45..47</title></rect>
+<rect x="666.98" y="389.56" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12034..12049) 15 B @ evt 50..51</title></rect>
+<rect x="666.59" y="389.99" width="0.66" height="9.04" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11714..12034) 320 B @ evt 49..51</title></rect>
+<rect x="667.95" y="389.14" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12049..12064) 15 B @ evt 54..55</title></rect>
+<rect x="667.55" y="389.56" width="0.66" height="9.04" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11729..12049) 320 B @ evt 53..55</title></rect>
+<rect x="668.91" y="388.72" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12064..12079) 15 B @ evt 58..59</title></rect>
+<rect x="668.52" y="389.14" width="0.66" height="9.04" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11744..12064) 320 B @ evt 57..59</title></rect>
+<rect x="669.88" y="388.29" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12079..12094) 15 B @ evt 62..63</title></rect>
+<rect x="669.48" y="388.72" width="0.66" height="9.04" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11759..12079) 320 B @ evt 61..63</title></rect>
+<rect x="670.84" y="273.55" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [16154..16155) 1 B @ evt 66..67</title></rect>
+<rect x="670.45" y="273.58" width="0.66" height="123.75" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11774..16154) 4 KB @ evt 65..67</title></rect>
+<rect x="671.81" y="274.31" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [16123..16128) 5 B @ evt 70..71</title></rect>
+<rect x="671.41" y="274.46" width="0.66" height="122.85" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11775..16123) 4 KB @ evt 69..71</title></rect>
+<rect x="672.77" y="387.70" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12100..12115) 15 B @ evt 74..75</title></rect>
+<rect x="672.38" y="388.12" width="0.66" height="9.04" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11780..12100) 320 B @ evt 73..75</title></rect>
+<rect x="673.34" y="364.30" width="0.40" height="32.44" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11795..12943) 1 KB @ evt 77..78</title></rect>
+<rect x="674.17" y="394.99" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11847..11857) 10 B @ evt 80..81</title></rect>
+<rect x="673.78" y="395.27" width="0.66" height="1.47" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11795..11847) 52 B @ evt 79..81</title></rect>
+<rect x="675.14" y="365.94" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12881..12885) 4 B @ evt 84..85</title></rect>
+<rect x="674.74" y="366.06" width="0.66" height="30.40" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11805..12881) 1 KB @ evt 83..85</title></rect>
+<rect x="675.71" y="363.91" width="0.40" height="32.44" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11809..12957) 1 KB @ evt 87..88</title></rect>
+<rect x="676.14" y="388.09" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11809..12101) 292 B @ evt 89..90</title></rect>
+<rect x="676.97" y="302.03" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [15141..15147) 6 B @ evt 92..93</title></rect>
+<rect x="676.58" y="302.20" width="0.66" height="94.14" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11809..15141) 3 KB @ evt 91..93</title></rect>
+<rect x="677.94" y="365.66" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12891..12895) 4 B @ evt 96..97</title></rect>
+<rect x="677.54" y="365.77" width="0.66" height="30.40" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11815..12891) 1 KB @ evt 95..97</title></rect>
+<rect x="678.51" y="363.63" width="0.40" height="32.44" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11819..12967) 1 KB @ evt 99..100</title></rect>
+<rect x="679.34" y="391.71" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11963..11973) 10 B @ evt 102..103</title></rect>
+<rect x="678.94" y="391.99" width="0.66" height="4.07" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11819..11963) 144 B @ evt 101..103</title></rect>
+<rect x="679.91" y="394.31" width="0.40" height="1.47" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11829..11881) 52 B @ evt 105..106</title></rect>
+<rect x="680.74" y="390.98" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11989..11999) 10 B @ evt 108..109</title></rect>
+<rect x="680.34" y="391.26" width="0.66" height="4.52" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11829..11989) 160 B @ evt 107..109</title></rect>
+<rect x="681.70" y="385.33" width="0.40" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12175..12199) 24 B @ evt 112..113</title></rect>
+<rect x="681.31" y="386.00" width="0.66" height="9.49" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11839..12175) 336 B @ evt 111..113</title></rect>
+<rect x="682.67" y="386.09" width="0.40" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12151..12172) 21 B @ evt 116..117</title></rect>
+<rect x="682.27" y="386.68" width="0.66" height="8.14" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11863..12151) 288 B @ evt 115..117</title></rect>
+<rect x="683.63" y="384.05" width="0.40" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12220..12244) 24 B @ evt 120..121</title></rect>
+<rect x="683.24" y="384.73" width="0.66" height="9.49" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11884..12220) 336 B @ evt 119..121</title></rect>
+<rect x="684.60" y="385.72" width="0.40" height="0.48" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12168..12185) 17 B @ evt 124..125</title></rect>
+<rect x="684.20" y="386.20" width="0.66" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11908..12168) 260 B @ evt 123..125</title></rect>
+<rect x="685.56" y="386.88" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12133..12144) 11 B @ evt 128..129</title></rect>
+<rect x="685.17" y="387.19" width="0.66" height="5.88" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11925..12133) 208 B @ evt 127..129</title></rect>
+<rect x="686.53" y="384.48" width="0.40" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12208..12229) 21 B @ evt 132..133</title></rect>
+<rect x="686.13" y="385.07" width="0.66" height="7.69" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11936..12208) 272 B @ evt 131..133</title></rect>
+<rect x="687.49" y="386.09" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12157..12172) 15 B @ evt 136..137</title></rect>
+<rect x="687.10" y="386.51" width="0.66" height="5.65" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11957..12157) 200 B @ evt 135..137</title></rect>
+<rect x="688.46" y="384.00" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12228..12246) 18 B @ evt 140..141</title></rect>
+<rect x="688.06" y="384.51" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11972..12228) 256 B @ evt 139..141</title></rect>
+<rect x="689.42" y="383.49" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12246..12264) 18 B @ evt 144..145</title></rect>
+<rect x="689.03" y="384.00" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [11990..12246) 256 B @ evt 143..145</title></rect>
+<rect x="690.39" y="382.98" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12264..12282) 18 B @ evt 148..149</title></rect>
+<rect x="689.99" y="383.49" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12008..12264) 256 B @ evt 147..149</title></rect>
+<rect x="690.96" y="379.70" width="0.40" height="10.51" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12026..12398) 372 B @ evt 151..152</title></rect>
+<rect x="691.79" y="381.03" width="0.40" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12330..12351) 21 B @ evt 154..155</title></rect>
+<rect x="691.39" y="381.62" width="0.66" height="8.59" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12026..12330) 304 B @ evt 153..155</title></rect>
+<rect x="692.75" y="381.71" width="0.40" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12307..12327) 20 B @ evt 158..159</title></rect>
+<rect x="692.36" y="382.27" width="0.66" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12047..12307) 260 B @ evt 157..159</title></rect>
+<rect x="693.72" y="380.86" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12339..12357) 18 B @ evt 162..163</title></rect>
+<rect x="693.32" y="381.37" width="0.66" height="7.69" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12067..12339) 272 B @ evt 161..163</title></rect>
+<rect x="694.29" y="378.49" width="0.40" height="10.06" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12085..12441) 356 B @ evt 165..166</title></rect>
+<rect x="695.12" y="376.45" width="0.40" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12489..12513) 24 B @ evt 168..169</title></rect>
+<rect x="694.72" y="377.13" width="0.66" height="11.41" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12085..12489) 404 B @ evt 167..169</title></rect>
+<rect x="696.08" y="384.39" width="0.40" height="0.76" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12205..12232) 27 B @ evt 172..173</title></rect>
+<rect x="695.69" y="385.16" width="0.66" height="2.71" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12109..12205) 96 B @ evt 171..173</title></rect>
+<rect x="697.05" y="378.88" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12408..12427) 19 B @ evt 176..177</title></rect>
+<rect x="696.65" y="379.42" width="0.66" height="7.69" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12136..12408) 272 B @ evt 175..177</title></rect>
+<rect x="698.01" y="378.83" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12411..12429) 18 B @ evt 180..181</title></rect>
+<rect x="697.62" y="379.34" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12155..12411) 256 B @ evt 179..181</title></rect>
+<rect x="698.98" y="381.00" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12337..12352) 15 B @ evt 184..185</title></rect>
+<rect x="698.58" y="381.43" width="0.66" height="4.63" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12173..12337) 164 B @ evt 183..185</title></rect>
+<rect x="699.55" y="374.79" width="0.40" height="10.85" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12188..12572) 384 B @ evt 187..188</title></rect>
+<rect x="699.98" y="377.39" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12188..12480) 292 B @ evt 189..190</title></rect>
+<rect x="700.42" y="353.31" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12188..13332) 1 KB @ evt 191..192</title></rect>
+<rect x="700.85" y="353.31" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12188..13332) 1 KB @ evt 193..194</title></rect>
+<rect x="701.29" y="353.31" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12188..13332) 1 KB @ evt 195..196</title></rect>
+<rect x="701.72" y="353.31" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12188..13332) 1 KB @ evt 197..198</title></rect>
+<rect x="702.16" y="353.31" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12188..13332) 1 KB @ evt 199..200</title></rect>
+<rect x="702.99" y="377.73" width="0.40" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12448..12468) 20 B @ evt 202..203</title></rect>
+<rect x="702.59" y="378.29" width="0.66" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12188..12448) 260 B @ evt 201..203</title></rect>
+<rect x="703.56" y="352.75" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12208..13352) 1 KB @ evt 205..206</title></rect>
+<rect x="703.99" y="352.75" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12208..13352) 1 KB @ evt 207..208</title></rect>
+<rect x="704.43" y="352.75" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12208..13352) 1 KB @ evt 209..210</title></rect>
+<rect x="705.26" y="376.85" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12480..12499) 19 B @ evt 212..213</title></rect>
+<rect x="704.86" y="377.39" width="0.66" height="7.69" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12208..12480) 272 B @ evt 211..213</title></rect>
+<rect x="705.83" y="348.48" width="0.40" height="36.05" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13503) 1 KB @ evt 215..216</title></rect>
+<rect x="706.26" y="359.67" width="0.40" height="24.86" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13107) 880 B @ evt 217..218</title></rect>
+<rect x="706.70" y="359.45" width="0.40" height="25.09" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13115) 888 B @ evt 219..220</title></rect>
+<rect x="707.13" y="352.21" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13371) 1 KB @ evt 221..222</title></rect>
+<rect x="707.57" y="351.65" width="0.40" height="32.89" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13391) 1 KB @ evt 223..224</title></rect>
+<rect x="708.00" y="352.21" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13371) 1 KB @ evt 225..226</title></rect>
+<rect x="708.44" y="352.21" width="0.40" height="32.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13371) 1 KB @ evt 227..228</title></rect>
+<rect x="708.87" y="360.01" width="0.40" height="24.52" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13095) 868 B @ evt 229..230</title></rect>
+<rect x="709.31" y="359.90" width="0.40" height="24.64" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13099) 872 B @ evt 231..232</title></rect>
+<rect x="709.74" y="358.54" width="0.40" height="25.99" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13147) 920 B @ evt 233..234</title></rect>
+<rect x="710.18" y="368.03" width="0.40" height="16.50" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..12811) 584 B @ evt 235..236</title></rect>
+<rect x="710.61" y="378.21" width="0.40" height="6.33" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..12451) 224 B @ evt 237..238</title></rect>
+<rect x="711.44" y="353.06" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13335..13341) 6 B @ evt 240..241</title></rect>
+<rect x="711.05" y="353.23" width="0.66" height="31.31" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12227..13335) 1 KB @ evt 239..241</title></rect>
+<rect x="712.41" y="377.25" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12469..12485) 16 B @ evt 244..245</title></rect>
+<rect x="712.01" y="377.70" width="0.66" height="6.67" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12233..12469) 236 B @ evt 243..245</title></rect>
+<rect x="713.37" y="375.69" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12521..12540) 19 B @ evt 248..249</title></rect>
+<rect x="712.98" y="376.23" width="0.66" height="7.69" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12249..12521) 272 B @ evt 247..249</title></rect>
+<rect x="713.94" y="372.41" width="0.40" height="10.96" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12268..12656) 388 B @ evt 251..252</title></rect>
+<rect x="714.77" y="375.47" width="0.40" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12528..12548) 20 B @ evt 254..255</title></rect>
+<rect x="714.38" y="376.03" width="0.66" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12268..12528) 260 B @ evt 253..255</title></rect>
+<rect x="715.74" y="375.07" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12544..12562) 18 B @ evt 258..259</title></rect>
+<rect x="715.34" y="375.58" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12288..12544) 256 B @ evt 257..259</title></rect>
+<rect x="716.70" y="374.56" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12562..12580) 18 B @ evt 262..263</title></rect>
+<rect x="716.31" y="375.07" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12306..12562) 256 B @ evt 261..263</title></rect>
+<rect x="717.67" y="345.29" width="0.40" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13592..13616) 24 B @ evt 266..267</title></rect>
+<rect x="717.27" y="345.97" width="0.66" height="35.83" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12324..13592) 1 KB @ evt 265..267</title></rect>
+<rect x="718.24" y="372.87" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12348..12640) 292 B @ evt 269..270</title></rect>
+<rect x="719.07" y="348.14" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13496..13515) 19 B @ evt 272..273</title></rect>
+<rect x="718.67" y="348.68" width="0.66" height="32.44" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12348..13496) 1 KB @ evt 271..273</title></rect>
+<rect x="720.03" y="378.83" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12419..12429) 10 B @ evt 276..277</title></rect>
+<rect x="719.64" y="379.11" width="0.66" height="1.47" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12367..12419) 52 B @ evt 275..277</title></rect>
+<rect x="721.00" y="372.70" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12633..12646) 13 B @ evt 280..281</title></rect>
+<rect x="720.60" y="373.06" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12377..12633) 256 B @ evt 279..281</title></rect>
+<rect x="721.57" y="371.68" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12390..12682) 292 B @ evt 283..284</title></rect>
+<rect x="722.00" y="371.68" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12390..12682) 292 B @ evt 285..286</title></rect>
+<rect x="722.44" y="372.58" width="0.40" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12390..12650) 260 B @ evt 287..288</title></rect>
+<rect x="723.27" y="345.12" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13610..13622) 12 B @ evt 290..291</title></rect>
+<rect x="722.87" y="345.46" width="0.66" height="34.47" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12390..13610) 1 KB @ evt 289..291</title></rect>
+<rect x="724.23" y="56.02" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [23838..23854) 16 B @ evt 294..295</title></rect>
+<rect x="723.84" y="56.47" width="0.66" height="323.12" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12402..23838) 11 KB @ evt 293..295</title></rect>
+<rect x="725.20" y="345.01" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13614..13626) 12 B @ evt 298..299</title></rect>
+<rect x="724.80" y="345.35" width="0.66" height="33.79" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12418..13614) 1 KB @ evt 297..299</title></rect>
+<rect x="726.16" y="351.05" width="0.40" height="0.73" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13386..13412) 26 B @ evt 302..303</title></rect>
+<rect x="725.77" y="351.79" width="0.66" height="27.01" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12430..13386) 956 B @ evt 301..303</title></rect>
+<rect x="727.13" y="347.27" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13540..13546) 6 B @ evt 306..307</title></rect>
+<rect x="726.73" y="347.44" width="0.66" height="30.63" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12456..13540) 1 KB @ evt 305..307</title></rect>
+<rect x="728.09" y="373.43" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12610..12620) 10 B @ evt 310..311</title></rect>
+<rect x="727.70" y="373.71" width="0.66" height="4.18" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12462..12610) 148 B @ evt 309..311</title></rect>
+<rect x="729.06" y="369.39" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12744..12763) 19 B @ evt 314..315</title></rect>
+<rect x="728.66" y="369.93" width="0.66" height="7.69" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12472..12744) 272 B @ evt 313..315</title></rect>
+<rect x="730.02" y="307.65" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14935..14948) 13 B @ evt 318..319</title></rect>
+<rect x="729.63" y="308.02" width="0.66" height="69.05" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12491..14935) 2 KB @ evt 317..319</title></rect>
+<rect x="730.99" y="306.16" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14988..15001) 13 B @ evt 322..323</title></rect>
+<rect x="730.59" y="306.52" width="0.66" height="70.18" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12504..14988) 2 KB @ evt 321..323</title></rect>
+<rect x="731.95" y="304.89" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [15033..15046) 13 B @ evt 326..327</title></rect>
+<rect x="731.56" y="305.25" width="0.66" height="71.09" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12517..15033) 2 KB @ evt 325..327</title></rect>
+<rect x="732.92" y="244.08" width="0.40" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [17174..17198) 24 B @ evt 330..331</title></rect>
+<rect x="732.52" y="244.76" width="0.66" height="131.21" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12530..17174) 4 KB @ evt 329..331</title></rect>
+<rect x="733.88" y="367.55" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12810..12828) 18 B @ evt 334..335</title></rect>
+<rect x="733.49" y="368.06" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12554..12810) 256 B @ evt 333..335</title></rect>
+<rect x="734.85" y="367.05" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12828..12846) 18 B @ evt 338..339</title></rect>
+<rect x="734.45" y="367.55" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12572..12828) 256 B @ evt 337..339</title></rect>
+<rect x="735.81" y="295.05" width="0.40" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [15370..15394) 24 B @ evt 342..343</title></rect>
+<rect x="735.42" y="295.73" width="0.66" height="78.55" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12590..15370) 2 KB @ evt 341..343</title></rect>
+<rect x="736.78" y="294.60" width="0.40" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [15386..15410) 24 B @ evt 346..347</title></rect>
+<rect x="736.38" y="295.28" width="0.66" height="78.32" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12614..15386) 2 KB @ evt 345..347</title></rect>
+<rect x="737.74" y="301.92" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [15138..15151) 13 B @ evt 350..351</title></rect>
+<rect x="737.35" y="302.29" width="0.66" height="70.64" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12638..15138) 2 KB @ evt 349..351</title></rect>
+<rect x="738.71" y="312.63" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14759..14772) 13 B @ evt 354..355</title></rect>
+<rect x="738.31" y="312.99" width="0.66" height="59.56" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12651..14759) 2 KB @ evt 353..355</title></rect>
+<rect x="739.28" y="330.48" width="0.40" height="41.70" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12664..14140) 1 KB @ evt 357..358</title></rect>
+<rect x="740.11" y="342.07" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13724..13730) 6 B @ evt 360..361</title></rect>
+<rect x="739.71" y="342.24" width="0.66" height="29.95" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12664..13724) 1 KB @ evt 359..361</title></rect>
+<rect x="741.07" y="48.68" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [24098..24114) 16 B @ evt 364..365</title></rect>
+<rect x="740.68" y="49.13" width="0.66" height="322.89" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12670..24098) 11 KB @ evt 363..365</title></rect>
+<rect x="742.04" y="360.09" width="0.40" height="0.96" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13058..13092) 34 B @ evt 368..369</title></rect>
+<rect x="741.64" y="361.06" width="0.66" height="10.51" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12686..13058) 372 B @ evt 367..369</title></rect>
+<rect x="743.00" y="362.86" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12976..12994) 18 B @ evt 372..373</title></rect>
+<rect x="742.61" y="363.37" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12720..12976) 256 B @ evt 371..373</title></rect>
+<rect x="743.97" y="362.36" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12994..13012) 18 B @ evt 376..377</title></rect>
+<rect x="743.57" y="362.86" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12738..12994) 256 B @ evt 375..377</title></rect>
+<rect x="744.93" y="357.92" width="0.40" height="0.71" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13144..13169) 25 B @ evt 380..381</title></rect>
+<rect x="744.54" y="358.63" width="0.66" height="10.96" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12756..13144) 388 B @ evt 379..381</title></rect>
+<rect x="745.90" y="361.14" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13037..13055) 18 B @ evt 384..385</title></rect>
+<rect x="745.50" y="361.65" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12781..13037) 256 B @ evt 383..385</title></rect>
+<rect x="746.86" y="360.63" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13055..13073) 18 B @ evt 388..389</title></rect>
+<rect x="746.47" y="361.14" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12799..13055) 256 B @ evt 387..389</title></rect>
+<rect x="747.83" y="362.44" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12993..13009) 16 B @ evt 392..393</title></rect>
+<rect x="747.43" y="362.89" width="0.66" height="4.97" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12817..12993) 176 B @ evt 391..393</title></rect>
+<rect x="748.79" y="359.50" width="0.40" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13093..13113) 20 B @ evt 396..397</title></rect>
+<rect x="748.40" y="360.07" width="0.66" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12833..13093) 260 B @ evt 395..397</title></rect>
+<rect x="749.76" y="365.35" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12901..12906) 5 B @ evt 400..401</title></rect>
+<rect x="749.36" y="365.49" width="0.66" height="1.36" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12853..12901) 48 B @ evt 399..401</title></rect>
+<rect x="750.72" y="359.70" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13098..13106) 8 B @ evt 404..405</title></rect>
+<rect x="750.33" y="359.93" width="0.66" height="6.78" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12858..13098) 240 B @ evt 403..405</title></rect>
+<rect x="751.69" y="358.63" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13126..13144) 18 B @ evt 408..409</title></rect>
+<rect x="751.29" y="359.13" width="0.66" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12866..13126) 260 B @ evt 407..409</title></rect>
+<rect x="752.65" y="358.06" width="0.40" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13144..13164) 20 B @ evt 412..413</title></rect>
+<rect x="752.26" y="358.63" width="0.66" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12884..13144) 260 B @ evt 411..413</title></rect>
+<rect x="753.62" y="357.66" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13160..13178) 18 B @ evt 416..417</title></rect>
+<rect x="753.22" y="358.17" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12904..13160) 256 B @ evt 415..417</title></rect>
+<rect x="754.58" y="357.16" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13178..13196) 18 B @ evt 420..421</title></rect>
+<rect x="754.19" y="357.66" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12922..13178) 256 B @ evt 419..421</title></rect>
+<rect x="755.15" y="356.14" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12940..13232) 292 B @ evt 423..424</title></rect>
+<rect x="755.98" y="356.17" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13212..13231) 19 B @ evt 426..427</title></rect>
+<rect x="755.59" y="356.70" width="0.66" height="7.69" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12940..13212) 272 B @ evt 425..427</title></rect>
+<rect x="756.95" y="40.28" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [24395..24411) 16 B @ evt 430..431</title></rect>
+<rect x="756.55" y="40.74" width="0.66" height="323.12" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12959..24395) 11 KB @ evt 429..431</title></rect>
+<rect x="757.91" y="357.98" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13151..13167) 16 B @ evt 434..435</title></rect>
+<rect x="757.52" y="358.43" width="0.66" height="4.97" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12975..13151) 176 B @ evt 433..435</title></rect>
+<rect x="758.88" y="355.21" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13247..13265) 18 B @ evt 438..439</title></rect>
+<rect x="758.48" y="355.72" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [12991..13247) 256 B @ evt 437..439</title></rect>
+<rect x="759.84" y="354.70" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13265..13283) 18 B @ evt 442..443</title></rect>
+<rect x="759.45" y="355.21" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13009..13265) 256 B @ evt 441..443</title></rect>
+<rect x="760.41" y="352.44" width="0.40" height="9.49" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13027..13363) 336 B @ evt 445..446</title></rect>
+<rect x="761.24" y="38.59" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [24455..24471) 16 B @ evt 448..449</title></rect>
+<rect x="760.85" y="39.04" width="0.66" height="322.89" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13027..24455) 11 KB @ evt 447..449</title></rect>
+<rect x="761.81" y="350.63" width="0.40" height="10.85" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13043..13427) 384 B @ evt 451..452</title></rect>
+<rect x="762.64" y="304.72" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [15039..15052) 13 B @ evt 454..455</title></rect>
+<rect x="762.25" y="305.08" width="0.66" height="56.40" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13043..15039) 1 KB @ evt 453..455</title></rect>
+<rect x="763.61" y="294.77" width="0.40" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [15380..15404) 24 B @ evt 458..459</title></rect>
+<rect x="763.21" y="295.45" width="0.66" height="65.66" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13056..15380) 2 KB @ evt 457..459</title></rect>
+<rect x="764.57" y="302.09" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [15132..15145) 13 B @ evt 462..463</title></rect>
+<rect x="764.18" y="302.46" width="0.66" height="57.98" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13080..15132) 2 KB @ evt 461..463</title></rect>
+<rect x="765.54" y="303.53" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [15081..15094) 13 B @ evt 466..467</title></rect>
+<rect x="765.14" y="303.90" width="0.66" height="56.17" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13093..15081) 1 KB @ evt 465..467</title></rect>
+<rect x="766.11" y="319.58" width="0.40" height="40.12" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13106..14526) 1 KB @ evt 469..470</title></rect>
+<rect x="766.94" y="330.94" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14118..14124) 6 B @ evt 472..473</title></rect>
+<rect x="766.54" y="331.11" width="0.66" height="28.59" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13106..14118) 1012 B @ evt 471..473</title></rect>
+<rect x="767.90" y="35.96" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [24548..24564) 16 B @ evt 476..477</title></rect>
+<rect x="767.51" y="36.41" width="0.66" height="323.12" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13112..24548) 11 KB @ evt 475..477</title></rect>
+<rect x="768.87" y="349.25" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13464..13476) 12 B @ evt 480..481</title></rect>
+<rect x="768.47" y="349.58" width="0.66" height="9.49" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13128..13464) 336 B @ evt 479..481</title></rect>
+<rect x="769.83" y="350.52" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13412..13431) 19 B @ evt 484..485</title></rect>
+<rect x="769.44" y="351.05" width="0.66" height="7.69" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13140..13412) 272 B @ evt 483..485</title></rect>
+<rect x="770.80" y="350.46" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13415..13433) 18 B @ evt 488..489</title></rect>
+<rect x="770.40" y="350.97" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13159..13415) 256 B @ evt 487..489</title></rect>
+<rect x="771.76" y="353.37" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13321..13330) 9 B @ evt 492..493</title></rect>
+<rect x="771.37" y="353.62" width="0.66" height="4.07" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13177..13321) 144 B @ evt 491..493</title></rect>
+<rect x="772.73" y="353.74" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13298..13317) 19 B @ evt 496..497</title></rect>
+<rect x="772.33" y="354.27" width="0.66" height="3.16" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13186..13298) 112 B @ evt 495..497</title></rect>
+<rect x="773.69" y="348.06" width="0.40" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13497..13518) 21 B @ evt 500..501</title></rect>
+<rect x="773.30" y="348.65" width="0.66" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13205..13497) 292 B @ evt 499..501</title></rect>
+<rect x="774.66" y="354.10" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13290..13304) 14 B @ evt 504..505</title></rect>
+<rect x="774.26" y="354.50" width="0.66" height="1.81" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13226..13290) 64 B @ evt 503..505</title></rect>
+<rect x="775.62" y="353.57" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13308..13323) 15 B @ evt 508..509</title></rect>
+<rect x="775.23" y="353.99" width="0.66" height="1.92" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13240..13308) 68 B @ evt 507..509</title></rect>
+<rect x="776.59" y="348.79" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13483..13492) 9 B @ evt 512..513</title></rect>
+<rect x="776.19" y="349.05" width="0.66" height="6.44" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13255..13483) 228 B @ evt 511..513</title></rect>
+<rect x="777.55" y="346.00" width="0.40" height="0.65" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13568..13591) 23 B @ evt 516..517</title></rect>
+<rect x="777.16" y="346.65" width="0.66" height="8.59" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13264..13568) 304 B @ evt 515..517</title></rect>
+<rect x="778.52" y="346.84" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13543..13561) 18 B @ evt 520..521</title></rect>
+<rect x="778.12" y="347.35" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13287..13543) 256 B @ evt 519..521</title></rect>
+<rect x="779.48" y="346.34" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13561..13579) 18 B @ evt 524..525</title></rect>
+<rect x="779.09" y="346.84" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13305..13561) 256 B @ evt 523..525</title></rect>
+<rect x="780.45" y="30.00" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [24759..24775) 16 B @ evt 528..529</title></rect>
+<rect x="780.05" y="30.45" width="0.66" height="323.12" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13323..24759) 11 KB @ evt 527..529</title></rect>
+<rect x="781.41" y="344.27" width="0.40" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13631..13652) 21 B @ evt 532..533</title></rect>
+<rect x="781.02" y="344.87" width="0.66" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13339..13631) 292 B @ evt 531..533</title></rect>
+<rect x="781.98" y="344.27" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13360..13652) 292 B @ evt 535..536</title></rect>
+<rect x="782.81" y="343.68" width="0.40" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13652..13673) 21 B @ evt 538..539</title></rect>
+<rect x="782.42" y="344.27" width="0.66" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13360..13652) 292 B @ evt 537..539</title></rect>
+<rect x="783.78" y="342.63" width="0.40" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13689..13710) 21 B @ evt 542..543</title></rect>
+<rect x="783.38" y="343.23" width="0.66" height="8.70" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13381..13689) 308 B @ evt 541..543</title></rect>
+<rect x="784.74" y="343.59" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13658..13676) 18 B @ evt 546..547</title></rect>
+<rect x="784.35" y="344.10" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13402..13658) 256 B @ evt 545..547</title></rect>
+<rect x="785.71" y="342.61" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13692..13711) 19 B @ evt 550..551</title></rect>
+<rect x="785.31" y="343.14" width="0.66" height="7.69" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13420..13692) 272 B @ evt 549..551</title></rect>
+<rect x="786.67" y="342.55" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13695..13713) 18 B @ evt 554..555</title></rect>
+<rect x="786.28" y="343.06" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13439..13695) 256 B @ evt 553..555</title></rect>
+<rect x="787.64" y="344.36" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13633..13649) 16 B @ evt 558..559</title></rect>
+<rect x="787.24" y="344.81" width="0.66" height="4.97" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13457..13633) 176 B @ evt 557..559</title></rect>
+<rect x="788.60" y="345.85" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13589..13596) 7 B @ evt 562..563</title></rect>
+<rect x="788.21" y="346.05" width="0.66" height="3.28" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13473..13589) 116 B @ evt 561..563</title></rect>
+<rect x="789.57" y="347.38" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13532..13542) 10 B @ evt 566..567</title></rect>
+<rect x="789.17" y="347.66" width="0.66" height="1.47" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13480..13532) 52 B @ evt 565..567</title></rect>
+<rect x="790.53" y="341.64" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13734..13745) 11 B @ evt 570..571</title></rect>
+<rect x="790.14" y="341.96" width="0.66" height="6.89" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13490..13734) 244 B @ evt 569..571</title></rect>
+<rect x="791.50" y="341.96" width="0.40" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13713..13734) 21 B @ evt 574..575</title></rect>
+<rect x="791.10" y="342.55" width="0.66" height="5.99" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13501..13713) 212 B @ evt 573..575</title></rect>
+<rect x="792.46" y="339.61" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13798..13817) 19 B @ evt 578..579</title></rect>
+<rect x="792.07" y="340.15" width="0.66" height="7.80" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13522..13798) 276 B @ evt 577..579</title></rect>
+<rect x="793.43" y="345.69" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13593..13602) 9 B @ evt 582..583</title></rect>
+<rect x="793.03" y="345.94" width="0.66" height="1.47" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13541..13593) 52 B @ evt 581..583</title></rect>
+<rect x="794.39" y="345.43" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13602..13611) 9 B @ evt 586..587</title></rect>
+<rect x="794.00" y="345.69" width="0.66" height="1.47" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13550..13602) 52 B @ evt 585..587</title></rect>
+<rect x="795.36" y="341.96" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13723..13734) 11 B @ evt 590..591</title></rect>
+<rect x="794.96" y="342.27" width="0.66" height="4.63" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13559..13723) 164 B @ evt 589..591</title></rect>
+<rect x="796.32" y="344.84" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13622..13632) 10 B @ evt 594..595</title></rect>
+<rect x="795.93" y="345.12" width="0.66" height="1.47" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13570..13622) 52 B @ evt 593..595</title></rect>
+<rect x="797.29" y="340.57" width="0.40" height="0.65" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13760..13783) 23 B @ evt 598..599</title></rect>
+<rect x="796.89" y="341.22" width="0.66" height="5.09" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13580..13760) 180 B @ evt 597..599</title></rect>
+<rect x="798.25" y="338.93" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13827..13841) 14 B @ evt 602..603</title></rect>
+<rect x="797.86" y="339.33" width="0.66" height="6.33" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13603..13827) 224 B @ evt 601..603</title></rect>
+<rect x="798.82" y="337.01" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13617..13909) 292 B @ evt 605..606</title></rect>
+<rect x="799.26" y="337.01" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13617..13909) 292 B @ evt 607..608</title></rect>
+<rect x="800.09" y="333.85" width="0.40" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13997..14021) 24 B @ evt 610..611</title></rect>
+<rect x="799.69" y="334.52" width="0.66" height="10.74" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13617..13997) 380 B @ evt 609..611</title></rect>
+<rect x="801.05" y="336.81" width="0.40" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13901..13916) 15 B @ evt 614..615</title></rect>
+<rect x="800.66" y="337.24" width="0.66" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13641..13901) 260 B @ evt 613..615</title></rect>
+<rect x="801.62" y="335.91" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13656..13948) 292 B @ evt 617..618</title></rect>
+<rect x="802.06" y="335.91" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13656..13948) 292 B @ evt 619..620</title></rect>
+<rect x="802.49" y="336.81" width="0.40" height="7.35" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13656..13916) 260 B @ evt 621..622</title></rect>
+<rect x="803.32" y="333.17" width="0.40" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14024..14045) 21 B @ evt 624..625</title></rect>
+<rect x="802.93" y="333.76" width="0.66" height="10.40" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13656..14024) 368 B @ evt 623..625</title></rect>
+<rect x="804.29" y="339.16" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13825..13833) 8 B @ evt 628..629</title></rect>
+<rect x="803.89" y="339.38" width="0.66" height="4.18" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13677..13825) 148 B @ evt 627..629</title></rect>
+<rect x="805.25" y="335.60" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13941..13959) 18 B @ evt 632..633</title></rect>
+<rect x="804.86" y="336.11" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13685..13941) 256 B @ evt 631..633</title></rect>
+<rect x="806.22" y="335.09" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13959..13977) 18 B @ evt 636..637</title></rect>
+<rect x="805.82" y="335.60" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13703..13959) 256 B @ evt 635..637</title></rect>
+<rect x="806.79" y="334.07" width="0.40" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13721..14013) 292 B @ evt 639..640</title></rect>
+<rect x="807.62" y="336.36" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13913..13932) 19 B @ evt 642..643</title></rect>
+<rect x="807.22" y="336.90" width="0.66" height="5.42" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13721..13913) 192 B @ evt 641..643</title></rect>
+<rect x="808.58" y="329.44" width="0.40" height="0.82" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14148..14177) 29 B @ evt 646..647</title></rect>
+<rect x="808.19" y="330.26" width="0.66" height="11.53" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13740..14148) 408 B @ evt 645..647</title></rect>
+<rect x="809.55" y="334.98" width="0.40" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13965..13981) 16 B @ evt 650..651</title></rect>
+<rect x="809.15" y="335.43" width="0.66" height="5.54" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13769..13965) 196 B @ evt 649..651</title></rect>
+<rect x="810.51" y="331.73" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14077..14096) 19 B @ evt 654..655</title></rect>
+<rect x="810.12" y="332.26" width="0.66" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13785..14077) 292 B @ evt 653..655</title></rect>
+<rect x="811.48" y="331.19" width="0.40" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14096..14115) 19 B @ evt 658..659</title></rect>
+<rect x="811.08" y="331.73" width="0.66" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13804..14096) 292 B @ evt 657..659</title></rect>
+<rect x="812.05" y="328.14" width="0.40" height="11.30" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13823..14223) 400 B @ evt 661..662</title></rect>
+<rect x="812.88" y="330.80" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14115..14129) 14 B @ evt 664..665</title></rect>
+<rect x="812.48" y="331.19" width="0.66" height="8.25" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13823..14115) 292 B @ evt 663..665</title></rect>
+<rect x="813.84" y="334.78" width="0.40" height="0.65" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13965..13988) 23 B @ evt 668..669</title></rect>
+<rect x="813.45" y="335.43" width="0.66" height="3.62" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13837..13965) 128 B @ evt 667..669</title></rect>
+<rect x="814.41" y="334.78" width="0.40" height="3.62" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13860..13988) 128 B @ evt 671..672</title></rect>
+<rect x="815.24" y="332.24" width="0.40" height="0.62" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14056..14078) 22 B @ evt 674..675</title></rect>
+<rect x="814.85" y="332.86" width="0.66" height="5.54" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13860..14056) 196 B @ evt 673..675</title></rect>
+<rect x="816.21" y="336.08" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13934..13942) 8 B @ evt 678..679</title></rect>
+<rect x="815.81" y="336.30" width="0.66" height="1.47" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13882..13934) 52 B @ evt 677..679</title></rect>
+<rect x="817.17" y="329.81" width="0.40" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14146..14164) 18 B @ evt 682..683</title></rect>
+<rect x="816.78" y="330.31" width="0.66" height="7.23" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13890..14146) 256 B @ evt 681..683</title></rect>
+<rect x="818.14" y="325.91" width="0.40" height="0.62" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14280..14302) 22 B @ evt 686..687</title></rect>
+<rect x="817.74" y="326.53" width="0.66" height="10.51" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13908..14280) 372 B @ evt 685..687</title></rect>
+<rect x="819.10" y="324.32" width="0.40" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14334..14358) 24 B @ evt 690..691</title></rect>
+<rect x="818.71" y="325.00" width="0.66" height="11.41" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13930..14334) 404 B @ evt 689..691</title></rect>
+<rect x="819.67" y="325.34" width="0.40" height="10.40" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13954..14322) 368 B @ evt 693..694</title></rect>
+<rect x="820.11" y="324.89" width="0.40" height="10.85" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13954..14338) 384 B @ evt 695..696</title></rect>
+<rect x="820.94" y="244.31" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [17182..17190) 8 B @ evt 698..699</title></rect>
+<rect x="820.54" y="244.53" width="0.66" height="91.20" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13954..17182) 3 KB @ evt 697..699</title></rect>
+<rect x="821.90" y="243.60" width="0.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [17206..17215) 9 B @ evt 702..703</title></rect>
+<rect x="821.51" y="243.86" width="0.66" height="91.66" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13962..17206) 3 KB @ evt 701..703</title></rect>
+<rect x="822.87" y="324.38" width="0.40" height="0.93" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [14323..14356) 33 B @ evt 706..707</title></rect>
+<rect x="822.47" y="325.31" width="0.66" height="9.95" fill="hsl(54, 65%, 55%)" fill-opacity="0.85"><title>args_buf: [13971..14323) 352 B @ evt 705..707</title></rect>
+<rect x="903.08" y="215.77" width="39.82" height="29.05" fill="hsl(215, 65%, 55%)" fill-opacity="0.85"><title>nest/cursors: [17172..18200) 1 KB @ evt 712..713</title></rect>
+<rect x="942.95" y="186.73" width="79.65" height="58.09" fill="hsl(266, 65%, 55%)" fill-opacity="0.85"><title>bfs_queue: [17172..19228) 2 KB @ evt 714..715</title></rect>
+<rect x="883.17" y="244.82" width="139.42" height="2.26" fill="hsl(338, 65%, 55%)" fill-opacity="0.85"><title>children: [17092..17172) 80 B @ evt 711..715</title></rect>
+<rect x="863.26" y="247.08" width="159.33" height="29.16" fill="hsl(338, 65%, 55%)" fill-opacity="0.85"><title>children: [16060..17092) 1 KB @ evt 710..715</title></rect>
+<rect x="823.44" y="276.24" width="199.16" height="58.09" fill="hsl(70, 65%, 55%)" fill-opacity="0.85"><title>pid_to_idx: [14004..16060) 2 KB @ evt 709..715</title></rect>
+<rect x="1102.28" y="331.73" width="39.82" height="0.57" fill="hsl(215, 65%, 55%)" fill-opacity="0.85"><title>nest/cursors: [14076..14096) 20 B @ evt 719..720</title></rect>
+<rect x="1221.79" y="328.90" width="79.69" height="1.70" fill="hsl(333, 65%, 55%)" fill-opacity="0.85"><title>tree: [14136..14196) 60 B @ evt 722..724</title></rect>
+<rect x="1142.14" y="330.60" width="159.33" height="1.70" fill="hsl(254, 65%, 55%)" fill-opacity="0.85"><title>tree/stack: [14076..14136) 60 B @ evt 721..724</title></rect>
+<rect x="1082.37" y="332.29" width="219.11" height="0.40" fill="hsl(338, 65%, 55%)" fill-opacity="0.85"><title>children: [14068..14076) 8 B @ evt 718..724</title></rect>
+<rect x="1062.45" y="332.52" width="239.02" height="0.68" fill="hsl(338, 65%, 55%)" fill-opacity="0.85"><title>children: [14044..14068) 24 B @ evt 717..724</title></rect>
+<rect x="1022.63" y="333.20" width="278.84" height="1.13" fill="hsl(70, 65%, 55%)" fill-opacity="0.85"><title>pid_to_idx: [14004..14044) 40 B @ evt 716..724</title></rect>
+<rect x="1460.81" y="300.56" width="79.65" height="31.39" fill="hsl(74, 65%, 55%)" fill-opacity="0.85"><title>tty/stdout: [14088..15199) 1 KB @ evt 727..728</title></rect>
+<rect x="1381.16" y="331.95" width="159.29" height="0.68" fill="hsl(106, 65%, 55%)" fill-opacity="0.85"><title>roots: [14064..14088) 24 B @ evt 726..728</title></rect>
+<rect x="1301.51" y="332.63" width="238.94" height="1.70" fill="hsl(336, 65%, 55%)" fill-opacity="0.85"><title>tree_layout: [14004..14064) 60 B @ evt 725..728</title></rect>
+<rect x="823.17" y="334.33" width="717.28" height="0.93" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13971..14004) 33 B @ evt 708..728</title></rect>
+<rect x="822.21" y="335.26" width="718.25" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13962..13971) 9 B @ evt 704..728</title></rect>
+<rect x="821.24" y="335.51" width="719.21" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13954..13962) 8 B @ evt 700..728</title></rect>
+<rect x="819.41" y="335.74" width="721.05" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13930..13954) 24 B @ evt 692..728</title></rect>
+<rect x="818.44" y="336.42" width="722.01" height="0.62" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13908..13930) 22 B @ evt 688..728</title></rect>
+<rect x="817.48" y="337.04" width="722.98" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13890..13908) 18 B @ evt 684..728</title></rect>
+<rect x="816.51" y="337.55" width="723.94" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13882..13890) 8 B @ evt 680..728</title></rect>
+<rect x="815.55" y="337.77" width="724.91" height="0.62" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13860..13882) 22 B @ evt 676..728</title></rect>
+<rect x="814.15" y="338.40" width="726.31" height="0.65" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13837..13860) 23 B @ evt 670..728</title></rect>
+<rect x="813.18" y="339.05" width="727.27" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13823..13837) 14 B @ evt 666..728</title></rect>
+<rect x="811.78" y="339.44" width="728.67" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13804..13823) 19 B @ evt 660..728</title></rect>
+<rect x="810.82" y="339.98" width="729.64" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13785..13804) 19 B @ evt 656..728</title></rect>
+<rect x="809.85" y="340.51" width="730.60" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13769..13785) 16 B @ evt 652..728</title></rect>
+<rect x="808.89" y="340.97" width="731.57" height="0.82" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13740..13769) 29 B @ evt 648..728</title></rect>
+<rect x="807.92" y="341.79" width="732.53" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13721..13740) 19 B @ evt 644..728</title></rect>
+<rect x="806.52" y="342.32" width="733.93" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13703..13721) 18 B @ evt 638..728</title></rect>
+<rect x="805.56" y="342.83" width="734.90" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13685..13703) 18 B @ evt 634..728</title></rect>
+<rect x="804.59" y="343.34" width="735.86" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13677..13685) 8 B @ evt 630..728</title></rect>
+<rect x="803.63" y="343.57" width="736.83" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13656..13677) 21 B @ evt 626..728</title></rect>
+<rect x="801.36" y="344.16" width="739.10" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13641..13656) 15 B @ evt 616..728</title></rect>
+<rect x="800.39" y="344.58" width="740.06" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13617..13641) 24 B @ evt 612..728</title></rect>
+<rect x="798.56" y="345.26" width="741.90" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13603..13617) 14 B @ evt 604..728</title></rect>
+<rect x="797.59" y="345.66" width="742.86" height="0.65" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13580..13603) 23 B @ evt 600..728</title></rect>
+<rect x="796.63" y="346.31" width="743.83" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13570..13580) 10 B @ evt 596..728</title></rect>
+<rect x="795.66" y="346.59" width="744.79" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13559..13570) 11 B @ evt 592..728</title></rect>
+<rect x="794.70" y="346.90" width="745.76" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13550..13559) 9 B @ evt 588..728</title></rect>
+<rect x="793.73" y="347.15" width="746.72" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13541..13550) 9 B @ evt 584..728</title></rect>
+<rect x="792.77" y="347.41" width="747.69" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13522..13541) 19 B @ evt 580..728</title></rect>
+<rect x="791.80" y="347.95" width="748.65" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13501..13522) 21 B @ evt 576..728</title></rect>
+<rect x="790.84" y="348.54" width="749.62" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13490..13501) 11 B @ evt 572..728</title></rect>
+<rect x="789.87" y="348.85" width="750.58" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13480..13490) 10 B @ evt 568..728</title></rect>
+<rect x="788.91" y="349.13" width="751.55" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13473..13480) 7 B @ evt 564..728</title></rect>
+<rect x="787.94" y="349.33" width="752.51" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13457..13473) 16 B @ evt 560..728</title></rect>
+<rect x="786.98" y="349.78" width="753.48" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13439..13457) 18 B @ evt 556..728</title></rect>
+<rect x="786.01" y="350.29" width="754.44" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13420..13439) 19 B @ evt 552..728</title></rect>
+<rect x="785.05" y="350.83" width="755.41" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13402..13420) 18 B @ evt 548..728</title></rect>
+<rect x="784.08" y="351.34" width="756.37" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13381..13402) 21 B @ evt 544..728</title></rect>
+<rect x="783.12" y="351.93" width="757.34" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13360..13381) 21 B @ evt 540..728</title></rect>
+<rect x="781.72" y="352.52" width="758.74" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13339..13360) 21 B @ evt 534..728</title></rect>
+<rect x="780.75" y="353.12" width="759.70" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13323..13339) 16 B @ evt 530..728</title></rect>
+<rect x="779.79" y="353.57" width="760.67" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13305..13323) 18 B @ evt 526..728</title></rect>
+<rect x="778.82" y="354.08" width="761.63" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13287..13305) 18 B @ evt 522..728</title></rect>
+<rect x="777.86" y="354.59" width="762.60" height="0.65" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13264..13287) 23 B @ evt 518..728</title></rect>
+<rect x="776.89" y="355.24" width="763.56" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13255..13264) 9 B @ evt 514..728</title></rect>
+<rect x="775.93" y="355.49" width="764.52" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13240..13255) 15 B @ evt 510..728</title></rect>
+<rect x="774.96" y="355.91" width="765.49" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13226..13240) 14 B @ evt 506..728</title></rect>
+<rect x="774.00" y="356.31" width="766.45" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13205..13226) 21 B @ evt 502..728</title></rect>
+<rect x="773.03" y="356.90" width="767.42" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13186..13205) 19 B @ evt 498..728</title></rect>
+<rect x="772.07" y="357.44" width="768.38" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13177..13186) 9 B @ evt 494..728</title></rect>
+<rect x="771.10" y="357.69" width="769.35" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13159..13177) 18 B @ evt 490..728</title></rect>
+<rect x="770.14" y="358.20" width="770.31" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13140..13159) 19 B @ evt 486..728</title></rect>
+<rect x="769.17" y="358.74" width="771.28" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13128..13140) 12 B @ evt 482..728</title></rect>
+<rect x="768.21" y="359.08" width="772.24" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13112..13128) 16 B @ evt 478..728</title></rect>
+<rect x="767.24" y="359.53" width="773.21" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13106..13112) 6 B @ evt 474..728</title></rect>
+<rect x="765.84" y="359.70" width="774.61" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13093..13106) 13 B @ evt 468..728</title></rect>
+<rect x="764.88" y="360.07" width="775.57" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13080..13093) 13 B @ evt 464..728</title></rect>
+<rect x="763.91" y="360.43" width="776.54" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13056..13080) 24 B @ evt 460..728</title></rect>
+<rect x="762.95" y="361.11" width="777.50" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13043..13056) 13 B @ evt 456..728</title></rect>
+<rect x="761.55" y="361.48" width="778.90" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13027..13043) 16 B @ evt 450..728</title></rect>
+<rect x="760.15" y="361.93" width="780.30" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [13009..13027) 18 B @ evt 444..728</title></rect>
+<rect x="759.18" y="362.44" width="781.27" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12991..13009) 18 B @ evt 440..728</title></rect>
+<rect x="758.22" y="362.95" width="782.23" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12975..12991) 16 B @ evt 436..728</title></rect>
+<rect x="757.25" y="363.40" width="783.20" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12959..12975) 16 B @ evt 432..728</title></rect>
+<rect x="756.29" y="363.85" width="784.16" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12940..12959) 19 B @ evt 428..728</title></rect>
+<rect x="754.89" y="364.39" width="785.56" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12922..12940) 18 B @ evt 422..728</title></rect>
+<rect x="753.92" y="364.90" width="786.53" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12904..12922) 18 B @ evt 418..728</title></rect>
+<rect x="752.96" y="365.41" width="787.49" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12884..12904) 20 B @ evt 414..728</title></rect>
+<rect x="751.99" y="365.97" width="788.46" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12866..12884) 18 B @ evt 410..728</title></rect>
+<rect x="751.03" y="366.48" width="789.42" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12858..12866) 8 B @ evt 406..728</title></rect>
+<rect x="750.06" y="366.71" width="790.39" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12853..12858) 5 B @ evt 402..728</title></rect>
+<rect x="749.10" y="366.85" width="791.35" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12833..12853) 20 B @ evt 398..728</title></rect>
+<rect x="748.13" y="367.41" width="792.32" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12817..12833) 16 B @ evt 394..728</title></rect>
+<rect x="747.17" y="367.86" width="793.28" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12799..12817) 18 B @ evt 390..728</title></rect>
+<rect x="746.20" y="368.37" width="794.25" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12781..12799) 18 B @ evt 386..728</title></rect>
+<rect x="745.24" y="368.88" width="795.21" height="0.71" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12756..12781) 25 B @ evt 382..728</title></rect>
+<rect x="744.27" y="369.59" width="796.18" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12738..12756) 18 B @ evt 378..728</title></rect>
+<rect x="743.31" y="370.10" width="797.14" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12720..12738) 18 B @ evt 374..728</title></rect>
+<rect x="742.34" y="370.61" width="798.11" height="0.96" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12686..12720) 34 B @ evt 370..728</title></rect>
+<rect x="741.38" y="371.57" width="799.07" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12670..12686) 16 B @ evt 366..728</title></rect>
+<rect x="740.41" y="372.02" width="800.04" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12664..12670) 6 B @ evt 362..728</title></rect>
+<rect x="739.01" y="372.19" width="801.44" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12651..12664) 13 B @ evt 356..728</title></rect>
+<rect x="738.05" y="372.55" width="802.40" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12638..12651) 13 B @ evt 352..728</title></rect>
+<rect x="737.08" y="372.92" width="803.37" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12614..12638) 24 B @ evt 348..728</title></rect>
+<rect x="736.12" y="373.60" width="804.33" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12590..12614) 24 B @ evt 344..728</title></rect>
+<rect x="735.15" y="374.28" width="805.30" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12572..12590) 18 B @ evt 340..728</title></rect>
+<rect x="734.19" y="374.79" width="806.26" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12554..12572) 18 B @ evt 336..728</title></rect>
+<rect x="733.22" y="375.30" width="807.23" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12530..12554) 24 B @ evt 332..728</title></rect>
+<rect x="732.26" y="375.97" width="808.19" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12517..12530) 13 B @ evt 328..728</title></rect>
+<rect x="731.29" y="376.34" width="809.16" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12504..12517) 13 B @ evt 324..728</title></rect>
+<rect x="730.33" y="376.71" width="810.12" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12491..12504) 13 B @ evt 320..728</title></rect>
+<rect x="729.36" y="377.08" width="811.09" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12472..12491) 19 B @ evt 316..728</title></rect>
+<rect x="728.40" y="377.61" width="812.05" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12462..12472) 10 B @ evt 312..728</title></rect>
+<rect x="727.43" y="377.90" width="813.02" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12456..12462) 6 B @ evt 308..728</title></rect>
+<rect x="726.47" y="378.06" width="813.98" height="0.73" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12430..12456) 26 B @ evt 304..728</title></rect>
+<rect x="725.50" y="378.80" width="814.95" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12418..12430) 12 B @ evt 300..728</title></rect>
+<rect x="724.54" y="379.14" width="815.91" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12402..12418) 16 B @ evt 296..728</title></rect>
+<rect x="723.57" y="379.59" width="816.88" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12390..12402) 12 B @ evt 292..728</title></rect>
+<rect x="721.30" y="379.93" width="819.15" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12377..12390) 13 B @ evt 282..728</title></rect>
+<rect x="720.34" y="380.30" width="820.11" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12367..12377) 10 B @ evt 278..728</title></rect>
+<rect x="719.37" y="380.58" width="821.08" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12348..12367) 19 B @ evt 274..728</title></rect>
+<rect x="717.97" y="381.12" width="822.48" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12324..12348) 24 B @ evt 268..728</title></rect>
+<rect x="717.01" y="381.79" width="823.44" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12306..12324) 18 B @ evt 264..728</title></rect>
+<rect x="716.04" y="382.30" width="824.41" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12288..12306) 18 B @ evt 260..728</title></rect>
+<rect x="715.08" y="382.81" width="825.37" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12268..12288) 20 B @ evt 256..728</title></rect>
+<rect x="713.68" y="383.38" width="826.77" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12249..12268) 19 B @ evt 250..728</title></rect>
+<rect x="712.71" y="383.91" width="827.74" height="0.45" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12233..12249) 16 B @ evt 246..728</title></rect>
+<rect x="711.75" y="384.37" width="828.70" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12227..12233) 6 B @ evt 242..728</title></rect>
+<rect x="705.56" y="384.53" width="834.89" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12208..12227) 19 B @ evt 214..728</title></rect>
+<rect x="703.29" y="385.07" width="837.16" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12188..12208) 20 B @ evt 204..728</title></rect>
+<rect x="699.28" y="385.64" width="841.17" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12173..12188) 15 B @ evt 186..728</title></rect>
+<rect x="698.32" y="386.06" width="842.13" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12155..12173) 18 B @ evt 182..728</title></rect>
+<rect x="697.35" y="386.57" width="843.10" height="0.54" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12136..12155) 19 B @ evt 178..728</title></rect>
+<rect x="696.39" y="387.11" width="844.06" height="0.76" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12109..12136) 27 B @ evt 174..728</title></rect>
+<rect x="695.42" y="387.87" width="845.03" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12085..12109) 24 B @ evt 170..728</title></rect>
+<rect x="694.02" y="388.55" width="846.43" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12067..12085) 18 B @ evt 164..728</title></rect>
+<rect x="693.06" y="389.06" width="847.39" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12047..12067) 20 B @ evt 160..728</title></rect>
+<rect x="692.09" y="389.62" width="848.36" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12026..12047) 21 B @ evt 156..728</title></rect>
+<rect x="690.69" y="390.21" width="849.76" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [12008..12026) 18 B @ evt 150..728</title></rect>
+<rect x="689.73" y="390.72" width="850.72" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11990..12008) 18 B @ evt 146..728</title></rect>
+<rect x="688.76" y="391.23" width="851.69" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11972..11990) 18 B @ evt 142..728</title></rect>
+<rect x="687.80" y="391.74" width="852.65" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11957..11972) 15 B @ evt 138..728</title></rect>
+<rect x="686.83" y="392.16" width="853.62" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11936..11957) 21 B @ evt 134..728</title></rect>
+<rect x="685.87" y="392.76" width="854.58" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11925..11936) 11 B @ evt 130..728</title></rect>
+<rect x="684.90" y="393.07" width="855.55" height="0.48" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11908..11925) 17 B @ evt 126..728</title></rect>
+<rect x="683.94" y="393.55" width="856.51" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11884..11908) 24 B @ evt 122..728</title></rect>
+<rect x="682.97" y="394.23" width="857.48" height="0.59" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11863..11884) 21 B @ evt 118..728</title></rect>
+<rect x="682.01" y="394.82" width="858.44" height="0.68" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11839..11863) 24 B @ evt 114..728</title></rect>
+<rect x="681.04" y="395.50" width="859.41" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11829..11839) 10 B @ evt 110..728</title></rect>
+<rect x="679.64" y="395.78" width="860.81" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11819..11829) 10 B @ evt 104..728</title></rect>
+<rect x="678.24" y="396.06" width="862.21" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11815..11819) 4 B @ evt 98..728</title></rect>
+<rect x="677.28" y="396.18" width="863.17" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11809..11815) 6 B @ evt 94..728</title></rect>
+<rect x="675.44" y="396.35" width="865.01" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11805..11809) 4 B @ evt 86..728</title></rect>
+<rect x="674.48" y="396.46" width="865.97" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11795..11805) 10 B @ evt 82..728</title></rect>
+<rect x="673.08" y="396.74" width="867.37" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11780..11795) 15 B @ evt 76..728</title></rect>
+<rect x="672.11" y="397.16" width="868.34" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11775..11780) 5 B @ evt 72..728</title></rect>
+<rect x="671.15" y="397.31" width="869.30" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11774..11775) 1 B @ evt 68..728</title></rect>
+<rect x="670.18" y="397.33" width="870.27" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11759..11774) 15 B @ evt 64..728</title></rect>
+<rect x="669.22" y="397.76" width="871.23" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11744..11759) 15 B @ evt 60..728</title></rect>
+<rect x="668.25" y="398.18" width="872.20" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11729..11744) 15 B @ evt 56..728</title></rect>
+<rect x="667.29" y="398.61" width="873.16" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11714..11729) 15 B @ evt 52..728</title></rect>
+<rect x="666.32" y="399.03" width="874.13" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11699..11714) 15 B @ evt 48..728</title></rect>
+<rect x="665.36" y="399.45" width="875.09" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11692..11699) 7 B @ evt 44..728</title></rect>
+<rect x="664.39" y="399.65" width="876.06" height="0.57" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11672..11692) 20 B @ evt 40..728</title></rect>
+<rect x="663.43" y="400.22" width="877.02" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11659..11672) 13 B @ evt 36..728</title></rect>
+<rect x="662.03" y="400.58" width="878.42" height="0.51" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11641..11659) 18 B @ evt 30..728</title></rect>
+<rect x="661.06" y="401.09" width="879.39" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11626..11641) 15 B @ evt 26..728</title></rect>
+<rect x="660.10" y="401.52" width="880.35" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11611..11626) 15 B @ evt 22..728</title></rect>
+<rect x="659.13" y="401.94" width="881.32" height="0.42" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11596..11611) 15 B @ evt 18..728</title></rect>
+<rect x="658.17" y="402.36" width="882.28" height="0.40" fill="hsl(157, 65%, 55%)" fill-opacity="0.85"><title>display: [11592..11596) 4 B @ evt 14..728</title></rect>
+<rect x="577.82" y="402.48" width="962.63" height="58.09" fill="hsl(272, 65%, 55%)" fill-opacity="0.85"><title>next: [9536..11592) 2 KB @ evt 10..728</title></rect>
+<rect x="418.49" y="460.57" width="1121.96" height="233.27" fill="hsl(142, 65%, 55%)" fill-opacity="0.85"><title>procs: [1280..9536) 8 KB @ evt 7..728</title></rect>
+<rect x="219.33" y="693.83" width="1321.12" height="36.17" fill="hsl(170, 65%, 55%)" fill-opacity="0.85"><title>gpu/agx/prev: [0..1280) 1 KB @ evt 3..728</title></rect>
+<rect x="1580.31" y="635.74" width="79.65" height="58.09" fill="hsl(136, 65%, 55%)" fill-opacity="0.85"><title>prev: [1280..3336) 2 KB @ evt 730..731</title></rect>
+<rect x="1540.49" y="693.83" width="119.47" height="36.17" fill="hsl(170, 65%, 55%)" fill-opacity="0.85"><title>gpu/agx/prev: [0..1280) 1 KB @ evt 729..731</title></rect>
+<text x="1676.0" y="20.0" font-size="12" fill="#222">label (max size)</text>
+<line x1="1660.0" x2="1674.0" y1="215.8" y2="215.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="210.8" width="12" height="10" fill="hsl(266, 65%, 55%)"/>
+<text x="1692.0" y="215.8" dominant-baseline="middle" fill="#222">bfs_queue (2 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="232.2" y2="232.2" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="227.2" width="12" height="10" fill="hsl(215, 65%, 55%)"/>
+<text x="1692.0" y="232.2" dominant-baseline="middle" fill="#222">nest/cursors (1 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="263.5" y2="263.5" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="258.5" width="12" height="10" fill="hsl(338, 65%, 55%)"/>
+<text x="1692.0" y="263.5" dominant-baseline="middle" fill="#222">children (1 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="292.8" y2="292.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="287.8" width="12" height="10" fill="hsl(54, 65%, 55%)"/>
+<text x="1692.0" y="292.8" dominant-baseline="middle" fill="#222">args_buf (11 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="306.0" y2="306.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="301.8" width="12" height="10" fill="hsl(70, 65%, 55%)"/>
+<text x="1692.0" y="306.8" dominant-baseline="middle" fill="#222">pid_to_idx (2 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="316.3" y2="320.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="315.8" width="12" height="10" fill="hsl(74, 65%, 55%)"/>
+<text x="1692.0" y="320.8" dominant-baseline="middle" fill="#222">tty/stdout (1 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="329.7" y2="334.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="329.8" width="12" height="10" fill="hsl(333, 65%, 55%)"/>
+<text x="1692.0" y="334.8" dominant-baseline="middle" fill="#222">tree (60 B)</text>
+<line x1="1660.0" x2="1674.0" y1="331.4" y2="348.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="343.8" width="12" height="10" fill="hsl(254, 65%, 55%)"/>
+<text x="1692.0" y="348.8" dominant-baseline="middle" fill="#222">tree/stack (60 B)</text>
+<line x1="1660.0" x2="1674.0" y1="332.3" y2="362.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="357.8" width="12" height="10" fill="hsl(106, 65%, 55%)"/>
+<text x="1692.0" y="362.8" dominant-baseline="middle" fill="#222">roots (24 B)</text>
+<line x1="1660.0" x2="1674.0" y1="333.5" y2="376.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="371.8" width="12" height="10" fill="hsl(336, 65%, 55%)"/>
+<text x="1692.0" y="376.8" dominant-baseline="middle" fill="#222">tree_layout (60 B)</text>
+<line x1="1660.0" x2="1674.0" y1="379.5" y2="390.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="385.8" width="12" height="10" fill="hsl(157, 65%, 55%)"/>
+<text x="1692.0" y="390.8" dominant-baseline="middle" fill="#222">display (34 B)</text>
+<line x1="1660.0" x2="1674.0" y1="431.5" y2="431.5" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="426.5" width="12" height="10" fill="hsl(272, 65%, 55%)"/>
+<text x="1692.0" y="431.5" dominant-baseline="middle" fill="#222">next (2 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="446.0" y2="446.0" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="441.0" width="12" height="10" fill="hsl(98, 65%, 55%)"/>
+<text x="1692.0" y="446.0" dominant-baseline="middle" fill="#222">pids_raw (1 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="498.5" y2="498.5" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="493.5" width="12" height="10" fill="hsl(293, 65%, 55%)"/>
+<text x="1692.0" y="498.5" dominant-baseline="middle" fill="#222">osbinary/objs (8 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="577.2" y2="577.2" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="572.2" width="12" height="10" fill="hsl(142, 65%, 55%)"/>
+<text x="1692.0" y="577.2" dominant-baseline="middle" fill="#222">procs (8 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="664.8" y2="664.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="659.8" width="12" height="10" fill="hsl(136, 65%, 55%)"/>
+<text x="1692.0" y="664.8" dominant-baseline="middle" fill="#222">prev (2 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="664.9" y2="678.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="673.8" width="12" height="10" fill="hsl(165, 65%, 55%)"/>
+<text x="1692.0" y="678.8" dominant-baseline="middle" fill="#222">gpu/agx/procs/raw (2 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="672.1" y2="692.8" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="687.8" width="12" height="10" fill="hsl(281, 65%, 55%)"/>
+<text x="1692.0" y="692.8" dominant-baseline="middle" fill="#222">gpu/agx/now (4 KB)</text>
+<line x1="1660.0" x2="1674.0" y1="711.9" y2="711.9" stroke="#ccc" stroke-width="0.4"/>
+<rect x="1676.0" y="706.9" width="12" height="10" fill="hsl(170, 65%, 55%)"/>
+<text x="1692.0" y="711.9" dominant-baseline="middle" fill="#222">gpu/agx/prev (1 KB)</text>
+<text x="60.0" y="744.0" text-anchor="middle" fill="#555">evt 0</text>
+<text x="460.0" y="744.0" text-anchor="middle" fill="#555">evt 7</text>
+<text x="860.0" y="744.0" text-anchor="middle" fill="#555">evt 709</text>
+<text x="1260.0" y="744.0" text-anchor="middle" fill="#555">evt 722</text>
+<text x="1660.0" y="744.0" text-anchor="middle" fill="#555">evt 732</text>
+</svg>

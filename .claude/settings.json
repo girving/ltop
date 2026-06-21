@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check)",
+      "Bash(cargo build:*)",
+      "Bash(script -q -c \"timeout 2.5 target/release/ltop\" /tmp/ltop_*)",
+      "Bash(script -q -c \"timeout 4.5 target/release/ltop\" /tmp/ltop_*)",
+      "Bash(git stash:*)",
+      "Bash(git push origin HEAD:claude-*)",
+      "Bash(git push -u origin HEAD:claude-*)",
+      "Bash(git push origin claude-*:claude-*)",
+      "Bash(git push -u origin claude-*:claude-*)"
+    ],
+    "ask": [
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/settings.local.json)",
+      "Write(/.claude/settings.json)",
+      "Write(/.claude/settings.local.json)",
+      "Bash(git push)",
+      "Bash(git push origin main)",
+      "Bash(git push origin HEAD)"
+    ]
+  }
+}

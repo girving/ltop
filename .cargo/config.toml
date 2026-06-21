@@ -1,0 +1,136 @@
+# `cargo ltop` / `cargo stack` — the canonical minimal-size build
+# invocations. Production links no libc at all: our `_start`
+# (`src/start.rs`) replaces the crt prologue, every syscall goes
+# through `src/syscall.rs`, mem* come from `compiler-builtins-mem`.
+#
+# Target is the custom JSON `.cargo/static-linux-x86_64.json` — a
+# minimal spec with no crt fallback objects, no bundled libc, just a
+# flat static Linux x86_64. `env = "gnu"` so the libc crate (used
+# only by `cargo test`'s glibc build) still compiles for our target,
+# though nothing from it ends up in the production binary. A
+# `--cfg=libc_free` rustflag identifies this build to our source —
+# see the cfg gates on `src/start.rs` and the fallback `main`.
+#
+# Scoped `-Z build-std` to these aliases (not `[unstable]
+# build-std =` in the config, which would apply workspace-wide and
+# break `cargo test` by rebuilding host std and triggering
+# duplicate-lang-item errors against the precompiled sysroot that
+# build.rs scripts link). With `-Z build-std` here, only `cargo ltop`
+# / `cargo stack` rebuild std; plain `cargo build`, `cargo test`,
+# `cargo run` leave the sysroot alone.
+#
+# Requires nightly. `rust-toolchain.toml` pins it.
+
+[unstable]
+# Lets `--target path/to/foo.json` resolve a custom target spec.
+json-target-spec = true
+
+[alias]
+# Dispatch to `tools/xtask/src/main.rs`, which picks the right
+# `--target .cargo/static-linux-<arch>.json` from `env::consts::ARCH`
+# and execs the inner `cargo build` / `cargo run` with the
+# `-Z build-std=core,alloc,panic_abort` + `compiler-builtins-mem`
+# flags baked in. One `cargo stack` / `cargo ltop` works on both
+# x86_64 and aarch64 hosts without the user (or CI) needing to
+# know which arch it's on. Why those build-std crates: the
+# production crate is `#![cfg_attr(not(test), no_std)]`, so
+# including `std` would only drag in `hashbrown`, `panic_unwind`,
+# `unwind`, `std_detect`, `proc_macro`, `rustc-demangle`, `cfg-if`,
+# and the two `rustc-std-workspace-*` shims just to be
+# dead-stripped — ~50% of a cold `cargo stack` wall-clock.
+# `cargo test` uses the default release profile + prebuilt sysroot,
+# so tests still see `std`.
+ltop     = "run --package xtask --release --quiet -- ltop"
+stack    = "run --package xtask --release --quiet -- stack"
+# `cargo ltop --install` builds the same libc-free static `min` binary
+# and copies it onto $PATH (cargo install root). The minimal pipeline
+# needs `-Z build-std` + the per-arch custom target, which plain
+# `cargo install --path .` can't do — so this is the canonical,
+# cross-platform "install the real thing" command. Handled inside the
+# `ltop` xtask subcommand, not a separate alias.
+# `cargo ltop-dbg` — same build as `cargo ltop` but `min-dbg` profile
+# (inherits min, strip=false). For nm/objdump per-function size work
+# when chasing __text regressions.
+ltop-dbg = "run --package xtask --release --quiet -- ltop-dbg"
+
+[target.static-linux-x86_64]
+# `.cargo/link-and-strip.sh` is a thin wrapper around the system
+# `cc`: it runs the link, then strips `.stack_sizes` / `.comment` /
+# section headers — sections the kernel loader never touches, so
+# ~2 KB of file-only overhead per shipped binary. Runs on every
+# `cargo ltop` / `cargo ltop --install` / `cargo stack`. The script
+# skips the strip step for the `min-stack` profile so
+# `tools/stack-svg` can still parse `.stack_sizes`.
+linker = "./.cargo/link-and-strip.sh"
+rustflags = [
+    "-Zunstable-options",
+    "-Cpanic=immediate-abort",
+    "-Cforce-unwind-tables=no",
+    "-Crelocation-model=static",
+    "-Clink-arg=-no-pie",
+    # Emit LLVM's per-function stack-size metadata into a `.stack_sizes`
+    # ELF section. Harmless for min (strip=true removes it); preserved
+    # under min-stack for tools/stack-svg.
+    "-Zemit-stack-sizes",
+    # Skip the default `crt1.o` / `crti.o` / `crtn.o`. Our custom
+    # `_start` in `src/start.rs` is the only entry point; we don't
+    # call into `__libc_start_main` or `__init_tls`.
+    "-Clink-arg=-nostartfiles",
+    "-Clink-arg=-Wl,--entry=ltop_start",
+    # Linker-script fragment that moves .rodata before .text so it
+    # rides along with the ELF-header page instead of needing its
+    # own LOAD segment + page. ~4.3 KB off the file (VmRSS
+    # unchanged — those were alignment-padding bytes the loader
+    # didn't map). `tests/stack_frames.rs::rodata_before_text`
+    # guards the layout.
+    "-Clink-arg=-Wl,-T,.cargo/rodata-first.ld",
+    # `-z noseparate-code`: put .rodata and .text in the same LOAD
+    # segment instead of separate R and R-X ones. Removes the ~1.2 KB
+    # of page-alignment padding between them. Cost: .rodata is now
+    # executable (loses NX protection) — fine for a 32 KB process
+    # monitor where ROP defenses aren't a meaningful threat model.
+    "-Clink-arg=-Wl,-z,noseparate-code",
+    # No `-Clink-self-contained` needed: the custom target spec has
+    # no crt fallback objects, so there's nothing for rustc to bundle
+    # in the first place. `-nostartfiles` handles the compiler
+    # driver's own default crt additions.
+    #
+    # `libc_free` cfg tells our production-only modules (src/start.rs,
+    # the syscall-based entry-point glue in src/main.rs) to compile.
+    # Other targets (macOS, glibc `cargo test`) get the fallback
+    # `extern "C" fn main` path instead.
+    "--cfg=libc_free",
+]
+
+# aarch64 sibling of the x86_64 section above. Same rustflags apply
+# — `-Cpanic=immediate-abort`, `-Crelocation-model=static`,
+# `-nostartfiles`, the rodata-first linker script, the
+# noseparate-code layout trick — all arch-independent linker / codegen
+# options. Our custom `_start` (src/start.rs) has an aarch64 branch
+# that matches.
+[target.static-linux-aarch64]
+linker = "./.cargo/link-and-strip.sh"
+rustflags = [
+    "-Zunstable-options",
+    "-Cpanic=immediate-abort",
+    "-Cforce-unwind-tables=no",
+    "-Crelocation-model=static",
+    "-Clink-arg=-no-pie",
+    "-Zemit-stack-sizes",
+    "-Clink-arg=-nostartfiles",
+    "-Clink-arg=-Wl,--entry=ltop_start",
+    "-Clink-arg=-Wl,-T,.cargo/rodata-first.ld",
+    "-Clink-arg=-Wl,-z,noseparate-code",
+    "--cfg=libc_free",
+]
+
+# macOS uses the stock `aarch64-apple-darwin` / `x86_64-apple-darwin`
+# triples — Mach-O / dyld rule out the Linux tricks (libc-free custom
+# `_start`, GNU linker scripts, `-no-pie`, static relocation). The
+# portable subset — `-Cpanic=immediate-abort` (strips panic format
+# strings) and `-Cforce-unwind-tables=no` (drops `__unwind_info`) —
+# is applied by xtask on mac-targeted invocations only, not here.
+# Putting them under `[target.*-apple-darwin]` here would break the
+# mac-arm CI's default `cargo build --release` step, because those
+# flags need build-std + panic_abort and `cargo build --release`
+# uses the precompiled sysroot.

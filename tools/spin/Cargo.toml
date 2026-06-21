@@ -1,0 +1,12 @@
+[package]
+name = "spin"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "spin"
+path = "src/main.rs"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.33"

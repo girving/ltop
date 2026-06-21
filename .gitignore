@@ -1,0 +1,23 @@
+/target
+/arena-trace.log
+# arena-trace.svg IS tracked — it's the README Footprint visualization,
+# regenerated when the memory layout changes (CLAUDE.md "Visualisation tools").
+/stack-trace.svg
+/.claude/settings.local.json
+/.claude/scheduled_tasks.lock
+
+# Claude Code sandbox noise
+.bash_profile
+.bashrc
+.claude/agents
+.claude/commands
+.claude/skills
+.gitconfig
+.gitmodules
+.idea
+.mcp.json
+.profile
+.ripgreprc
+.vscode
+.zprofile
+.zshrc

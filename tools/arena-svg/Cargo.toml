@@ -1,0 +1,9 @@
+[package]
+name = "arena-svg"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "arena-svg"
+path = "src/main.rs"
