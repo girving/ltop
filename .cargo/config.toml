@@ -52,6 +52,11 @@ stack    = "run --package xtask --release --quiet -- stack"
 # (inherits min, strip=false). For nm/objdump per-function size work
 # when chasing __text regressions.
 ltop-dbg = "run --package xtask --release --quiet -- ltop-dbg"
+# `cargo ltop-build` — the `cargo ltop` build without the run or mac-pack
+# steps, forwarding extra args to the inner `cargo build`. For external
+# launchers (e.g. warm) that need the canonical build as a pure
+# `cargo build`-shaped command.
+ltop-build = "run --package xtask --release --quiet -- build"
 
 [target.static-linux-x86_64]
 # `.cargo/link-and-strip.sh` is a thin wrapper around the system

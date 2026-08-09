@@ -10,8 +10,9 @@
 //! Cargo invokes us via:
 //!
 //!   [alias]
-//!   stack = "run --package xtask --release --quiet -- stack"
-//!   ltop  = "run --package xtask --release --quiet -- ltop"
+//!   stack      = "run --package xtask --release --quiet -- stack"
+//!   ltop       = "run --package xtask --release --quiet -- ltop"
+//!   ltop-build = "run --package xtask --release --quiet -- build"
 //!
 //! so xtask's argv[1] is the subcommand name; everything after it
 //! is forwarded. `cargo` keeps a single leading `--` when aliases
@@ -57,10 +58,18 @@ fn main() {
     //                          so the installed binary is byte-identical
     //                          to what you'd run in-tree, on any host.
     // `cargo ltop-dbg`:        min-dbg profile (strip=false), nm/objdump.
+    // `cargo ltop-build`:      min profile, build only — no run, no
+    //                          mac-pack (packing only shrinks the file on
+    //                          disk).  For external launchers (e.g. warm)
+    //                          that need the canonical build as a pure
+    //                          `cargo build`-shaped command without
+    //                          duplicating the target / build-std /
+    //                          RUSTFLAGS knowledge that lives here.
     let profile = match subcmd.as_str() {
         "stack" => "min-stack",
         "ltop" => "min",
         "ltop-dbg" => "min-dbg",
+        "build" => "min",
         other => die(&format!("unknown xtask subcommand: {other}")),
     };
 
@@ -113,9 +122,10 @@ fn main() {
              -Clink-arg=-Wl,-no_function_starts \
              -Clink-arg=-Wl,-segprot,__TEXT,rx,rx{stack_sizes}"));
     }
-    // `cargo stack` / `cargo ltop-dbg` forward extra args (e.g. `-v`)
-    // to the build; `ltop` reserves them for the binary.
-    if subcmd == "stack" || subcmd == "ltop-dbg" {
+    // `cargo stack` / `cargo ltop-dbg` / `cargo ltop-build` forward extra
+    // args (e.g. `-v`, `--message-format=…`) to the build; `ltop` reserves
+    // them for the binary.
+    if subcmd == "stack" || subcmd == "ltop-dbg" || subcmd == "build" {
         c.args(&rest);
     }
     let s = c.status().unwrap_or_else(|e| die(&format!("cargo build: {e}")));
