@@ -65,6 +65,13 @@ const MAX_SIZE: u64 = 326 * 1024 / 10;       // 32.6 KB = 33,382 B
 fn binary_size_under_threshold() {
     let path = Path::new(MIN_BINARY);
     let Ok(meta) = fs::metadata(path) else {
+        // CI always builds the min binary before `cargo test`; a missing
+        // file there is a workflow-ordering bug and must fail loudly —
+        // a green run with zero assertions would silently retire every
+        // footprint claim. Locally the friendly skip stays.
+        assert!(std::env::var_os("CI").is_none(),
+            "{} missing under CI — the build step must run before tests",
+            path.display());
         eprintln!(
             "skipping: {} not built — run `cargo ltop -- --check` first",
             path.display(),
@@ -83,4 +90,35 @@ fn binary_size_under_threshold() {
         MAX_SIZE,
         actual - MAX_SIZE,
     );
+}
+
+/// The mac binary's two headline invariants, asserted rather than
+/// logged (the CI workflow used to only pipe `otool -L`/`nm` to the
+/// job log, where a regression needs a human reader to notice —
+/// audit design take): zero imported symbols, and exactly one
+/// LC_LOAD_DYLIB (libSystem, which dyld requires). Mirrors
+/// stack_frames.rs's no_heap_allocator_symbols pattern.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn mac_no_imports_and_single_dylib() {
+    use std::process::Command;
+    if !Path::new(MIN_BINARY).exists() {
+        assert!(std::env::var_os("CI").is_none(),
+            "{MIN_BINARY} missing under CI — the build step must run before tests");
+        eprintln!("skipping: {MIN_BINARY} not built — run `cargo ltop -- --check` first");
+        return;
+    }
+    let nm = Command::new("nm").args(["-u", MIN_BINARY]).output()
+        .expect("`nm` unavailable");
+    let und = String::from_utf8_lossy(&nm.stdout);
+    assert!(und.trim().is_empty(),
+        "imported symbols crept in (each is a libSystem call the \
+         kernel-as-witness invariant forbids):\n{und}");
+    let ot = Command::new("otool").args(["-L", MIN_BINARY]).output()
+        .expect("`otool` unavailable");
+    let text = String::from_utf8_lossy(&ot.stdout);
+    let dylibs: Vec<&str> = text.lines()
+        .filter(|l| l.contains(".dylib")).collect();
+    assert!(dylibs.len() == 1 && dylibs[0].contains("libSystem"),
+        "expected exactly one LC_LOAD_DYLIB (libSystem), got:\n{text}");
 }

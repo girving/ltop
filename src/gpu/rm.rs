@@ -21,7 +21,7 @@ use crate::syscall;
 /// included; those live in the NVIDIA kernel driver's dmesg anyway.
 macro_rules! dbg_eprintln {
     ($msg:literal) => {
-        crate::syscall::write_all(2, concat!("DBG: ", $msg, "\n").as_bytes());
+        crate::syscall::write_once(2, concat!("DBG: ", $msg, "\n").as_bytes());
     };
 }
 

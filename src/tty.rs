@@ -130,7 +130,7 @@ pub fn enter_raw_mode() -> RawModeGuard {
     raw.c_cc[VINTR] = VDISABLE;
     raw.c_cc[VQUIT] = VDISABLE;
     ioctl_termios(FD, TCSET, &mut raw);
-    syscall::write_all(1, b"\x1b[?25l");
+    syscall::write_once(1, b"\x1b[?25l");
     RawModeGuard { fd: FD, orig }
 }
 
@@ -142,7 +142,7 @@ impl Drop for RawModeGuard {
     fn drop(&mut self) {
         let mut t = self.orig;
         ioctl_termios(self.fd, TCSET, &mut t);
-        syscall::write_all(1, b"\x1b[?25h");
+        syscall::write_once(1, b"\x1b[?25h");
     }
 }
 
@@ -178,7 +178,7 @@ pub fn term_size() -> (usize, usize) {
 pub fn write_stdout(bytes: &[u8]) {
     let mut off = 0;
     while off < bytes.len() {
-        let n = syscall::write_all(1, &bytes[off..]);
+        let n = syscall::write_once(1, &bytes[off..]);
         if n <= 0 { break; }
         off += n as usize;
     }

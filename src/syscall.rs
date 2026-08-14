@@ -510,16 +510,17 @@ pub unsafe fn write(fd: i32, buf: *const u8, len: usize) -> i64 {
     { libc::write(fd, buf as *const _, len) as i64 }
 }
 
-/// Safe wrapper around `write`: takes a slice so the pointer + length
-/// come from one place and can't disagree. Always inlined so callers
-/// pay nothing extra over the raw pointer form. Prefer this at call
-/// sites — the only reason to use `write` directly is a partial-write
-/// loop that advances into the middle of a buffer.
+/// Safe wrapper around `write`: ONE `write(2)`, no retry — the name
+/// deliberately avoids std's `write_all`, which loops to completion
+/// (this doesn't; `tty::write_stdout` demonstrates looping over this
+/// wrapper by re-slicing when completion matters). Takes a slice so
+/// the pointer + length come from one place and can't disagree; always
+/// inlined so callers pay nothing over the raw pointer form.
 ///
 /// Returns the syscall's return value: number of bytes written on
 /// success, or a negative `-errno` on failure.
 #[inline(always)]
-pub fn write_all(fd: i32, buf: &[u8]) -> i64 {
+pub fn write_once(fd: i32, buf: &[u8]) -> i64 {
     // SAFETY: `buf` is a live slice, so its pointer is valid for `buf.len()`
     // readable bytes. The kernel write syscall is safe from Rust's POV —
     // the worst it can do on bad args is return an error.
@@ -1142,7 +1143,7 @@ mod tests {
     fn write_read_roundtrip_via_socketpair() {
         let (a, b) = std::os::unix::net::UnixStream::pair().expect("socketpair");
         let msg = b"ltop-syscall-roundtrip";
-        let wrote = write_all(a.as_raw_fd(), msg);
+        let wrote = write_once(a.as_raw_fd(), msg);
         assert_eq!(wrote, msg.len() as i64, "write returned {wrote}");
 
         let mut buf = [0u8; 64];

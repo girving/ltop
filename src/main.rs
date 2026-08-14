@@ -452,7 +452,7 @@ fn emit_elision_row<W: TinyWriter + ?Sized>(out: &mut W, more: usize, has_gpu: b
 #[cfg(not(test))]
 pub(crate) unsafe fn parse_args(argc: i32, argv: *const *const u8) -> u64 {
     if platform::has_arg(argc, argv, b"--check") {
-        syscall::write_all(1, b"ok\n");
+        syscall::write_once(1, b"ok\n");
         syscall::exit_group(0);
     }
     let mut flags: u64 = 0;
@@ -632,9 +632,10 @@ pub(crate) fn run(flags: u64) {
                 let wall_now = now_epoch();
                 let (width, height) = tty::term_size();
 
-                // The 72 KB rm::Scratch for GPU ioctls comes from `tick` via
-                // a sub-scope inside populate — reclaimed before we return,
-                // so the rest of the tick gets the bytes back. The small
+                // The RM ioctl scratch (see rm::populate's doc for the
+                // current byte count) comes from `tick` via a sub-scope
+                // inside populate — reclaimed before we return, so the
+                // rest of the tick gets the bytes back. The small
                 // gpu/procs FVec backing `gpu.procs` is sized exactly
                 // (n_gpus * MAX_PROCS_PER_GPU) and also lives in `tick`.
                 //
@@ -680,10 +681,11 @@ pub(crate) fn run(flags: u64) {
                         p.gpu = Some(usage);
                     }
                 }
-                // Delegate to libc::qsort (via map.rs's shared helper) instead of
-                // `sort_unstable_by_key` — the latter monomorphises Rust's generic
-                // quicksort on ProcInfo for ~2 KB. ProcInfo is `repr(C)` with pid
-                // at offset 0, so the same cmp_u32_key map.rs uses works directly.
+                // Delegate to sort.rs's in-place heapsort (via map.rs's
+                // shared re-export) instead of `sort_unstable_by_key` — the
+                // latter monomorphises Rust's generic quicksort on ProcInfo
+                // for ~2 KB. ProcInfo is `repr(C)` with pid at offset 0, so
+                // the shared u32-key sorter works directly.
                 // Proof of the sorter's key-at-offset-0 precondition
                 // (repr(C) makes it stable; the assert makes it loud).
                 const { assert!(core::mem::offset_of!(ProcInfo, pid) == 0) };

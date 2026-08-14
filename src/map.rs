@@ -43,18 +43,12 @@ impl<'a, V> Map<'a, V> {
     pub fn iter(&self) -> core::slice::Iter<'a, (u32, V)> { self.0.iter() }
 }
 
-impl<'a> Set<'a> {
-    #[allow(dead_code)]
-    pub fn new(sorted: &'a [u32]) -> Self {
-        debug_assert!(sorted.windows(2).all(|w| w[0] < w[1]),
-            "Set::new: slice must be sorted with no duplicates");
-        Self(sorted)
-    }
-
+// `contains` is Set's whole read API: production only ever asks "is
+// this pid a GPU pid". len/is_empty/iter existed for symmetry with Map
+// but had zero callers, including in tests — pruned rather than kept
+// behind allow(dead_code).
+impl Set<'_> {
     pub fn contains(&self, k: &u32) -> bool { self.0.binary_search(k).is_ok() }
-    #[allow(dead_code)] pub fn len(&self) -> usize { self.0.len() }
-    #[allow(dead_code)] pub fn is_empty(&self) -> bool { self.0.is_empty() }
-    #[allow(dead_code)] pub fn iter(&self) -> core::slice::Iter<'a, u32> { self.0.iter() }
 }
 
 /// Sort `entries` by key, merging consecutive duplicate keys via `merge`,

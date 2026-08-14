@@ -181,7 +181,7 @@ mod trace {
         let fd = get_fd();
         if fd < 0 { return; }
         // Partial writes are rare for small line buffers — ignore here.
-        syscall::write_all(fd, buf);
+        syscall::write_once(fd, buf);
     }
 
     pub(super) fn alloc(label: super::Label, new_offset: u32) {
@@ -218,7 +218,7 @@ mod trace {
 // ── Backing storage ──────────────────────────────────────────────────────────
 
 /// Production arena size (bytes). Peak live usage on a typical host is
-/// ~160 KB (init-scope cross-tick buffers + the per-tick rm::Scratch +
+/// ~160 KB (init-scope cross-tick buffers + the per-tick RM ioctl scratch +
 /// tick transients), so 512 KB gives 3× headroom for machines with many
 /// more processes than our MAX_PROCS (1024) default, or future growth.
 /// Virtual memory is free: pages never written don't commit RSS, so

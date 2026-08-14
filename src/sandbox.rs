@@ -514,7 +514,7 @@ pub fn install() {
 /// Print "ltop: sandbox install failed (S err=N)\n" to stderr and
 /// exit. `s` is the ASCII step character documented at each call
 /// site, `e` is the negative-errno return from the offending
-/// syscall. Single helper because LLVM emits the write_all +
+/// syscall. Single helper because LLVM emits the write_once +
 /// exit_group pair once regardless of how many fail-fast sites we
 /// have.
 #[inline(never)]
@@ -540,7 +540,7 @@ fn fail(s: u8, e: i64) -> ! {
     buf[n] = b')';
     buf[n + 1] = b'\n';
     n += 2;
-    let _ = syscall::write_all(2, &buf[..n]);
+    let _ = syscall::write_once(2, &buf[..n]);
     syscall::exit_group(2);
 }
 
@@ -741,7 +741,7 @@ unsafe extern "C" fn sigsys_trampoline(_sig: i32, info: *const u8, _ctx: *const 
     while v > 0 { tn -= 1; tmp[tn] = b'0' + (v % 10) as u8; v /= 10; }
     append(&mut buf, &mut n, &tmp[tn..]);
     append(&mut buf, &mut n, b"\n");
-    let _ = syscall::write_all(2, &buf[..n]);
+    let _ = syscall::write_once(2, &buf[..n]);
     syscall::exit_group(159);
 }
 

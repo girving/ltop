@@ -35,6 +35,8 @@ fn load_min_stack() -> Option<Vec<u8>> {
     match std::fs::read(path) {
         Ok(b) => Some(b),
         Err(_) => {
+            assert!(std::env::var_os("CI").is_none(),
+                "{} missing under CI — the build step must run before tests", path.display());
             eprintln!("skipping: {} not built — run `cargo stack` first", path.display());
             None
         }
@@ -121,6 +123,8 @@ fn rodata_before_text() {
 fn no_heap_allocator_symbols() {
     use std::process::Command;
     if !Path::new(MIN_STACK_BINARY).exists() {
+        assert!(std::env::var_os("CI").is_none(),
+            "{MIN_STACK_BINARY} missing under CI — the build step must run before tests");
         eprintln!("skipping: {MIN_STACK_BINARY} not built — run `cargo stack` first");
         return;
     }
@@ -179,6 +183,8 @@ fn steady_state_stack_rss_one_page() {
     use std::time::Duration;
 
     if !Path::new(MIN_STACK_BINARY).exists() {
+        assert!(std::env::var_os("CI").is_none(),
+            "{MIN_STACK_BINARY} missing under CI — the build step must run before tests");
         eprintln!("skipping: {MIN_STACK_BINARY} not built — run `cargo stack` first");
         return;
     }

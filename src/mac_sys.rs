@@ -464,7 +464,6 @@ pub fn vm_statistics64() -> Option<[u32; 38]> {
 /// failure (callers treat that as "no IOKit available", same as the
 /// libIOKit path treats `IOServiceGetMatchingServices` returning a
 /// non-success kern_return).
-#[allow(dead_code)] // Phase-1 plumbing; first production caller lands in Phase 2.
 pub fn io_master_port() -> u32 {
     use core::sync::atomic::{AtomicU32, Ordering};
     static MASTER: AtomicU32 = AtomicU32::new(0);
@@ -571,7 +570,6 @@ unsafe fn host_get_io_master_uncached() -> u32 {
 ///
 /// Returns 0 on success, -errno on failure (kern_return_t flattened
 /// the same way our syscall wrappers do). Callers usually ignore it.
-#[allow(dead_code)] // Phase-1 plumbing; first production caller lands in Phase 2.
 pub fn mach_port_deallocate(port: u32) -> i32 {
     if port == 0 { return 0; }
     unsafe { mach_port_deallocate_raw(port) }
@@ -697,7 +695,6 @@ unsafe fn mach_port_deallocate_raw(port: u32) -> i32 {
 ///   "IOProviderClass\0"
 ///   String|EOC, len=14  09 00 00 8E     ("AGXAccelerator")
 ///   "AGXAccelerator" + 2-byte tail pad to 4-byte boundary
-#[allow(dead_code)] // Phase-2 plumbing; first production caller lands in Phase 4.
 pub static AGX_MATCHING_BLOB: [u8; 48] = [
     // OSSerializeBinary signature.
     0xd3, 0x00, 0x00, 0x00,
@@ -721,7 +718,6 @@ pub static AGX_MATCHING_BLOB: [u8; 48] = [
 ///
 /// The blob is capped at 4095 bytes (libIOKit's threshold for the inline
 /// vs OOL variant); ours is 48.
-#[allow(dead_code)] // Phase-4 wires this in.
 pub fn io_service_get_matching_services_bin(master: u32, blob: &[u8]) -> u32 {
     if master == 0 || blob.len() >= 4096 { return 0; }
     unsafe { iokit_iter_call(2881, master, Some(blob)) }
@@ -732,7 +728,6 @@ pub fn io_service_get_matching_services_bin(master: u32, blob: &[u8]) -> u32 {
 /// signals this via `kIOReturnNoDevice` in the retcode, which our code
 /// rolls into a 0 return). Caller releases the popped port via
 /// `mach_port_deallocate`.
-#[allow(dead_code)]
 pub fn io_iterator_next(iter: u32) -> u32 {
     if iter == 0 { return 0; }
     unsafe { iokit_iter_call(2802, iter, None) }
@@ -742,7 +737,6 @@ pub fn io_iterator_next(iter: u32) -> u32 {
 /// Allocates a child iterator over `entry`'s descendants in the given
 /// `plane` (e.g., `b"IOService\0"`). Returns the iterator port or 0 on
 /// failure. `plane` is sent as an `io_name_t` (NUL-terminated, ≤128 B).
-#[allow(dead_code)]
 pub fn io_registry_entry_get_child_iterator(entry: u32, plane: &[u8]) -> u32 {
     if entry == 0 || plane.is_empty() || plane.len() > 128 { return 0; }
     // The plane-name MIG arg is `char[128]` — fixed buffer, NUL-terminated.
@@ -756,7 +750,6 @@ pub fn io_registry_entry_get_child_iterator(entry: u32, plane: &[u8]) -> u32 {
 /// returned address+size in an `OolBuffer` whose `Drop` calls
 /// `vm_deallocate` so the kernel-mapped pages get released even on
 /// early returns.
-#[allow(dead_code)]
 pub fn io_registry_entry_get_properties_bin(entry: u32) -> Option<OolBuffer> {
     if entry == 0 { return None; }
     unsafe { iokit_get_props_inner(2878, entry, None) }
@@ -778,13 +771,11 @@ pub fn io_registry_entry_get_property_bin(entry: u32, name: &[u8]) -> Option<Ool
 /// RAII wrapper around an out-of-line memory descriptor returned by an
 /// IOKit MIG call. The kernel allocates pages in our address space; we
 /// own them until `vm_deallocate` releases them.
-#[allow(dead_code)]
 pub struct OolBuffer {
     addr: u64,
     size: u32,
 }
 
-#[allow(dead_code)]
 impl OolBuffer {
     pub fn as_bytes(&self) -> &[u8] {
         // SAFETY: kernel-allocated, valid for `size` bytes until Drop runs.
@@ -964,18 +955,6 @@ pub fn unmap_idle_state(pid: i32) -> u64 {
     total
 }
 
-/// Our own task port via `task_self_trap` (Mach trap #-28), cached on
-/// first call. Spells `mach_task_self()` without linking libSystem,
-/// which writes the value to the global `mach_task_self_` during dyld
-/// init.
-///
-/// We used to assume the well-known name `0x103` (the value of that
-/// global on the macOS versions we'd tested), but on macOS 26 the
-/// kernel rejects `0x103` as `MACH_SEND_INVALID_DEST` (`= 0x10000003`)
-/// — every `vm_deallocate` and `mach_port_deallocate` we issued was
-/// failing silently and leaking the IOKit OOL buffer / send-right
-/// (`phys_footprint` grew ~3 MB every few seconds). The trap is the
-/// only ABI-stable spelling.
 /// Look up the VM region containing `addr` via `proc_pidregioninfo` and
 /// return `(region_start, region_end)`. Used by mac startup to find
 /// the stack region's bounds so we can relocate SP near the top page
@@ -1002,6 +981,17 @@ pub fn region_containing(pid: i32, addr: u64) -> Option<(u64, u64)> {
     Some((info.pri_address, info.pri_address + info.pri_size))
 }
 
+/// Our own task port via `task_self_trap` (Mach trap #-28), cached on
+/// first call. Spells `mach_task_self()` without linking libSystem,
+/// which writes the value to the global `mach_task_self_` during dyld
+/// init.
+///
+/// Never assume the well-known name `0x103` (the value of that global
+/// on some macOS versions): macOS 26 rejects it as
+/// `MACH_SEND_INVALID_DEST` (`= 0x10000003`), silently failing every
+/// `vm_deallocate` / `mach_port_deallocate` and leaking the IOKit OOL
+/// buffers / send-rights (`phys_footprint` grew ~3 MB every few
+/// seconds). The trap is the only ABI-stable spelling.
 fn cached_task_self() -> u32 {
     use core::sync::atomic::{AtomicU32, Ordering};
     static TASK: AtomicU32 = AtomicU32::new(0);
@@ -1031,7 +1021,6 @@ fn cached_task_self() -> u32 {
 /// other value is a kern error code (KERN_INVALID_ARGUMENT, etc.).
 /// libsyscall's `_mach_vm_deallocate_trap` is literally
 /// `mov x16,#-12; svc #0x80; ret` for this reason.
-#[allow(dead_code)] // Reached via OolBuffer::Drop once Phase 4 instantiates one.
 #[inline]
 unsafe fn vm_deallocate(addr: u64, size: u64) -> i32 {
     use core::arch::asm;

@@ -44,7 +44,7 @@ Standard cargo layout. `Cargo.toml` at root, source in `src/`. Only runtime dep 
 - `src/platform.rs` — libc-backed std replacements (`Instant`, `PidDir`, `sleep`, `getpid`), `#[global_allocator]` (`Abort`), `#[panic_handler]`, `rust_eh_personality` stub.
 - `src/start.rs` — custom `_start` for libc-free Linux (relocates SP, walks `madvise(DONTNEED)` to find the stack VMA, tail-jumps to `ltop_main`).
 - `src/syscall.rs` — raw `svc #0x80` / `syscall` wrappers, Linux + macOS branches.
-- `src/sandbox.rs` — Linux-only seccomp-bpf install. Hand-encoded `sock_filter[]` allowing only the tick-loop syscall set (`read`/`write`/`close`/`ioctl`/`madvise`/`nanosleep`/`clock_gettime`/`exit_group`/`openat`/`getdents64`/`restart_syscall`/`rt_sigreturn`); deny action is `KILL_PROCESS` by default, `RET_TRAP` + SIGSYS-handler-prints-syscall-nr under the `sandbox-trap` cargo feature. Installed in `run()` after `gpu::init` and before the tick loop, gated on `cfg(libc_free)` (glibc-dynamic builds aren't allowlisted). macOS has no in-process equivalent that doesn't break the no-libSystem-symbols invariant; sandbox-exec wrapper would be the equivalent. Future tightening: argument filtering on `ioctl`/`mmap`/`openat` + Landlock for path restrictions.
+- `src/sandbox.rs` — Linux-only seccomp-bpf install. Hand-encoded `sock_filter[]` allowing only the tick-loop syscall set (`read`/`write`/`close`/`ioctl`/`madvise`/`nanosleep`/`clock_gettime`/`exit_group`/`openat`/`getdents64`/`restart_syscall`/`rt_sigreturn`); deny action is `KILL_PROCESS` by default, `RET_TRAP` + SIGSYS-handler-prints-syscall-nr under the `sandbox-trap` cargo feature. Installed in `run()` after `gpu::init` and before the tick loop, gated on `cfg(libc_free)` (glibc-dynamic builds aren't allowlisted). Argument filtering (`write` fd, `openat` flags, `ioctl` cmd) and Landlock path restriction are implemented — sandbox.rs's module doc is the authoritative description, including its remaining future work. macOS has no in-process equivalent that doesn't break the no-libSystem-symbols invariant; a sandbox-exec wrapper would be the equivalent.
 - `src/mac_sys.rs` — Darwin-only: hand-rolled Mach traps, `mach_msg2` MIG, IOKit calls, `unmap_idle_state`. `cfg(target_os = "macos")`.
 - `src/osbinary.rs` — pure-byte decoder for `OSSerializeBinary` (xnu's IOKit reply format). macOS-only.
 - `src/tty.rs` — `enter_raw_mode`, `term_size`, `write_stdout` (raw `write(2)` from a caller-supplied `FStr`), `read_one_stdin`. Render buffer lives per-tick in `tick.span("tty/stdout", …)`.
@@ -64,12 +64,14 @@ Standard cargo layout. `Cargo.toml` at root, source in `src/`. Only runtime dep 
 
 To diff TUI output after a refactor: `cargo ltop -- --once` prints one frame and exits. For more, `script -q -c "timeout 4.5 target/release/ltop" out.txt` captures three (first tick at 300 ms for CPU%-delta, then 2 s steady-state).
 
+For manual tree/color/elision checks, `tools/spin` spawns N children burning configurable CPU (and GPU on mac) fractions — e.g. `cargo run --release -p spin -- --children 8 --cpu 0.5` in one terminal, `cargo ltop` in another.
+
 ## Architecture notes
 
 - `collect_procs` (per-platform) writes non-noise processes into a caller-supplied `FVec<ProcInfo>`; `filter_with_children` BFS-marks visibility and compacts via `FVec::retain_in_place`. Both platforms must stay in sync.
 - Per-type display names (lean, cc1plus, interpreters) live in `build_display_into` — add new cases there.
 - Tree rendering + vertical-overflow logic in `render_tree`, via `emit_proc_row` + per-group child budgets.
-- GPU driver state (`rm::State` from `gpu::init(init)`) allocates once at the outermost scope and builds an exact-sized `FSpan<Gpu>`; no-GPU hosts get an empty `FSpan` and downstream ops are natural no-ops. Per-tick: a 72 KB RM ioctl buffer in a `rm::populate` sub-scope (reclaimed on return) and per-process entries in `Scratch.procs_buf`.
+- GPU driver state (`rm::State` from `gpu::init(init)`) allocates once at the outermost scope and builds an exact-sized `FSpan<Gpu>`; no-GPU hosts get an empty `FSpan` and downstream ops are natural no-ops. Per-tick: the RM ioctl buffer in a `rm::populate` sub-scope (reclaimed on return; rm.rs's populate doc is the single source of truth for its size) and per-process entries in a tick-scope FVec.
 
 ## Arena allocator
 
@@ -117,7 +119,7 @@ Break these when the data must outlive the producer (e.g. `ProcInfo.display` in 
 
 ## Binary-size lessons
 
-The production binary is ≤ 23 KB on Linux, ≤ 33 KB on mac (`tests/footprint.rs` enforces; README's Footprint section has the table). Lessons that generalise — each is a rule, not a story:
+The production binary is a few tens of KB (`tests/footprint.rs` enforces the exact per-target thresholds; README's Footprint section has the table). Lessons that generalise — each is a rule, not a story:
 
 1. **Direct syscalls beat std when behaviour matches.** `available_parallelism` (~10 KB of cgroup parsers) → `sysconf(_SC_NPROCESSORS_ONLN)`. `read_to_string` (~1.5 KB) → `open`+`read`+`close` (~200 B). Keep stdlib for setup; syscalls in kernel-bound helpers.
 2. **Generics that sneak in tables.** `str::split_whitespace` pulls Unicode tables; `split_ascii_whitespace` doesn't. `{:?}` pulls grapheme tables; `{}` doesn't. ASCII case-fold: `b.eq_ignore_ascii_case(c)` not the `c…` form. `nm --size-sort` before/after every refactor.
