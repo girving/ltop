@@ -204,18 +204,25 @@ const DENY_ACTION: u32 = SECCOMP_RET_TRAP;
 ///                       /proc dirfd; Landlock confines the path).
 ///   getpid            - collect_procs needs to know our own pid
 ///                       to filter ourselves out of the tree.
+///   restart_syscall   - substituted by the kernel when a syscall
+///                       that was interrupted by a signal running NO
+///                       handler resumes: get_signal() returns false
+///                       and -ERESTART_RESTARTBLOCK triggers
+///                       setup_restart_syscall (a handler would see
+///                       -EINTR instead — kernel/signal.c +
+///                       arch/*/kernel/signal.c). The tick loop lives
+///                       in nanosleep, which returns
+///                       ERESTART_RESTARTBLOCK, and we install no
+///                       handlers, so SIGSTOP/SIGCONT (Ctrl-Z + fg) or
+///                       any ignored signal re-enters the filter with
+///                       this nr; without the entry seccomp kills the
+///                       process on resume.
 ///   rt_sigreturn      - return-from-signal-handler. Required by the
 ///                       `sandbox-trap` SIGSYS handler; gated on
 ///                       that feature so non-trap builds don't carry
 ///                       a JEQ for a syscall they can't reach (we
 ///                       install no handlers, so the kernel never
 ///                       invokes rt_sigreturn).
-///
-/// Notably absent: `restart_syscall`. The kernel only invokes it
-/// when a syscall (e.g. nanosleep) is interrupted by a signal whose
-/// handler returned with SA_RESTART. We install no handlers in
-/// production (or in trap mode — the SIGSYS handler exits, doesn't
-/// return), so this path is unreachable.
 #[cfg(target_arch = "x86_64")]
 const ALLOW_DIRECT: &[u32] = &[
     0,    // read
@@ -224,6 +231,7 @@ const ALLOW_DIRECT: &[u32] = &[
     35,   // nanosleep
     39,   // getpid
     217,  // getdents64
+    219,  // restart_syscall
     228,  // clock_gettime
     231,  // exit_group
     #[cfg(feature = "sandbox-trap")]
@@ -263,6 +271,7 @@ const ALLOW_DIRECT: &[u32] = &[
     101,  // nanosleep
     172,  // getpid
     61,   // getdents64
+    128,  // restart_syscall
     113,  // clock_gettime
     94,   // exit_group
     #[cfg(feature = "sandbox-trap")]
@@ -860,6 +869,21 @@ mod tests {
                 "syscall {nr} should be allowed but BPF returned {result:#x}",
             );
         }
+    }
+
+    /// Ctrl-Z + fg (SIGSTOP/SIGCONT) during the tick nanosleep makes
+    /// the kernel re-enter via restart_syscall: no handler ran, so
+    /// -ERESTART_RESTARTBLOCK becomes a restart_syscall re-entry
+    /// rather than -EINTR. The filter must allow that nr or the
+    /// monitor dies with SIGSYS on resume. Named test (beyond the
+    /// ALLOW_DIRECT sweep) so removing the entry fails loudly.
+    #[test]
+    fn bpf_allows_restart_syscall_after_stop_cont() {
+        #[cfg(target_arch = "x86_64")]  const NR: i32 = 219;
+        #[cfg(target_arch = "aarch64")] const NR: i32 = 128;
+        let data = make_data(NR, AUDIT_ARCH, &[]);
+        assert_eq!(run_bpf(&PROG, &data), SECCOMP_RET_ALLOW,
+                   "restart_syscall must be allowlisted (Ctrl-Z + fg kills ltop otherwise)");
     }
 
     /// A representative set of dangerous syscalls must be denied.
