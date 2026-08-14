@@ -684,6 +684,9 @@ pub(crate) fn run(flags: u64) {
                 // `sort_unstable_by_key` — the latter monomorphises Rust's generic
                 // quicksort on ProcInfo for ~2 KB. ProcInfo is `repr(C)` with pid
                 // at offset 0, so the same cmp_u32_key map.rs uses works directly.
+                // Proof of the sorter's key-at-offset-0 precondition
+                // (repr(C) makes it stable; the assert makes it loud).
+                const { assert!(core::mem::offset_of!(ProcInfo, pid) == 0) };
                 map::sort_by_u32_key(&mut procs);
 
                 let la = load_avg(num_cpus);

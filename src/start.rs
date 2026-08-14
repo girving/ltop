@@ -162,7 +162,11 @@ pub unsafe extern "C" fn ltop_entry(sp: *const i64) -> ! {
             rsp = in(reg) new_rsp,
             target = sym ltop_main,
             in("rdi") flags,
-            options(noreturn, nostack),
+            // No `nostack`: the block pushes a dummy return slot, and
+            // promising the compiler we don't touch the stack while
+            // executing `push` is contract-UB even though control never
+            // returns (audit finding). `noreturn` alone loses nothing.
+            options(noreturn),
         );
     }
     #[cfg(target_arch = "aarch64")]

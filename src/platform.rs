@@ -243,6 +243,15 @@ mod rt {
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn bzero(dst: *mut u8, len: usize) {
         let mut i = 0usize;
+        // Byte-align up to an 8-byte boundary first: write_volatile
+        // through a *mut u64 requires an aligned pointer per Rust's
+        // rules, and LLVM's implicit bzero calls carry no alignment
+        // guarantee (AArch64 hardware tolerates the misalignment, the
+        // language does not). Mirrors the existing tail loop.
+        while i < len && (dst as usize + i) & 7 != 0 {
+            unsafe { core::ptr::write_volatile(dst.add(i), 0); }
+            i += 1;
+        }
         while i + 8 <= len {
             unsafe {
                 core::ptr::write_volatile(dst.add(i) as *mut u64, 0);

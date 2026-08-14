@@ -71,6 +71,12 @@ pub fn freeze_map<'a, 'id, V: Copy>(
     entries: &'a mut crate::arena::FVec<'id, (u32, V)>,
     mut merge: impl FnMut(&mut V, &mut V),
 ) -> Map<'a, V> {
+    // Compiler-enforced proof of sort_by_u32_key's "u32 key at offset 0"
+    // precondition: #[repr(Rust)] tuple layout is only empirically
+    // stable, and a future rustc layout change would otherwise silently
+    // sort by whatever field landed first (audit finding, sort.rs:65).
+    const { assert!(core::mem::offset_of!((u32, V), 0) == 0,
+        "freeze_map: rustc no longer lays (u32, V) out with the key first"); }
     sort_by_u32_key(entries.as_mut_slice());
     let new_len = dedup_in_place(entries.as_mut_slice(), |right, left| {
         if left.0 == right.0 {
