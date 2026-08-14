@@ -161,13 +161,14 @@ pub fn populate<'id>(
         let mut now: FVec<'_, (u32, u64)> =
             f.vec("gpu/agx/now", MAX_TRACKED_PIDS);
 
-        // OSSerializeBinary scratch — reused across every property
-        // blob we parse this tick. 1024 entries × 8 bytes = 8 KB,
-        // comfortably above the highest fan-out IORegistry dict we
-        // encounter on AGX (the AGXAccelerator root has ~80 keys
-        // including nested PerformanceStatistics).
-        const OSBIN_OBJS_CAP: usize = 1024;
-        let mut osbin_objs = f.zeros::<(u32, u32)>("osbinary/objs", OSBIN_OBJS_CAP);
+        // OSSerializeBinary checkpoint table — reused across every
+        // property blob we parse this tick. 512 entries × 4 bytes =
+        // 2 KB; the decoder doubles its checkpoint stride whenever a
+        // blob has more objects than slots, so any blob size parses
+        // (the AGXAccelerator root is ~2000+ objects, dominated by
+        // IOReportLegend).
+        const OSBIN_CKPTS: usize = 512;
+        let mut osbin_ckpts = f.zeros::<u32>("osbinary/ckpts", OSBIN_CKPTS);
 
         let master = crate::mac_sys::io_master_port();
         if master == 0 { return f.empty(); }
@@ -185,7 +186,7 @@ pub fn populate<'id>(
             // kernel pages.
             if let Some(buf) = crate::mac_sys::io_registry_entry_get_properties_bin(agx) {
                 if let Some(bin) = crate::osbinary::OsBinary::parse(
-                    buf.as_bytes(), &mut osbin_objs[..])
+                    buf.as_bytes(), &mut osbin_ckpts[..])
                 {
                     if let Some(used) = read_agx_used_mib_blob(&bin) {
                         total_used_mib += used;
@@ -203,7 +204,7 @@ pub fn populate<'id>(
                     if child == 0 { break; }
                     if let Some(buf) = crate::mac_sys::io_registry_entry_get_properties_bin(child) {
                         if let Some(bin) = crate::osbinary::OsBinary::parse(
-                            buf.as_bytes(), &mut osbin_objs[..])
+                            buf.as_bytes(), &mut osbin_ckpts[..])
                         {
                             if let Some((pid, ns)) = read_user_client_blob(&bin) {
                                 let _ = now.push((pid, ns));
@@ -396,8 +397,8 @@ mod tests {
         emit_symbol(&mut b, b"In use system memory", false);
         emit_number(&mut b, 12_451_840, true);
 
-        let mut objs = vec![(0u32, 0u32); 32];
-        let bin = crate::osbinary::OsBinary::parse(&b, &mut objs).expect("parse");
+        let mut ckpts = vec![0u32; 32];
+        let bin = crate::osbinary::OsBinary::parse(&b, &mut ckpts).expect("parse");
         assert_eq!(read_agx_used_mib_blob(&bin), Some(11));
     }
 
@@ -424,8 +425,8 @@ mod tests {
         emit_symbol(&mut b, b"accumulatedGPUTime", false);
         emit_number(&mut b, 500_000_000, true);
 
-        let mut objs = vec![(0u32, 0u32); 64];
-        let bin = crate::osbinary::OsBinary::parse(&b, &mut objs).expect("parse");
+        let mut ckpts = vec![0u32; 64];
+        let bin = crate::osbinary::OsBinary::parse(&b, &mut ckpts).expect("parse");
         assert_eq!(read_user_client_blob(&bin), Some((619, 1_500_000_000)));
     }
 
@@ -440,8 +441,8 @@ mod tests {
         emit_tag(&mut b, TY_DICT, 1, false);
         emit_symbol(&mut b, b"AppUsage", false);
         emit_tag(&mut b, TY_ARRAY, 0, true);
-        let mut objs = vec![(0u32, 0u32); 16];
-        let bin = crate::osbinary::OsBinary::parse(&b, &mut objs).expect("parse");
+        let mut ckpts = vec![0u32; 16];
+        let bin = crate::osbinary::OsBinary::parse(&b, &mut ckpts).expect("parse");
         assert_eq!(read_user_client_blob(&bin), None);
     }
 
@@ -455,8 +456,8 @@ mod tests {
         emit_tag(&mut b, TY_DICT, 1, false);
         emit_symbol(&mut b, b"IOUserClientCreator", false);
         emit_string(&mut b, b"pid 1234, app", true);
-        let mut objs = vec![(0u32, 0u32); 16];
-        let bin = crate::osbinary::OsBinary::parse(&b, &mut objs).expect("parse");
+        let mut ckpts = vec![0u32; 16];
+        let bin = crate::osbinary::OsBinary::parse(&b, &mut ckpts).expect("parse");
         assert_eq!(read_user_client_blob(&bin), Some((1234, 0)));
     }
 
@@ -538,9 +539,15 @@ mod tests {
             let (entries, _new_prev, totals) = populate(&state, &prev, frame, 1_000_000_000);
             // First tick: prev is empty so no entries qualify yet.
             assert_eq!(entries.len(), 0);
-            let (n, _util, _used, total) = totals;
+            let (n, _util, used, total) = totals;
             assert_eq!(n, 1);
             assert_eq!(total, state.total_mib);
+            // Used memory comes straight from PerformanceStatistics, so
+            // it must be nonzero even on the first tick — the kernel
+            // always has some MiB in use. This is the tripwire for the
+            // parse-failure-reads-as-zero bug class (a too-small parse
+            // buffer once zeroed this permanently).
+            assert!(used > 0, "GPU used-memory parsed as 0 MiB");
         });
     }
 

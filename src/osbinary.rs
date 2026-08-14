@@ -45,11 +45,18 @@
 //! every reuse). Containers go in too, so an Object ref *can* point at
 //! a Dict/Array, though that's rare in IORegistry data.
 //!
-//! Our parser walks the blob once, recording `(offset, len)` for each
-//! emitted item — `offset` so Object back-refs can be resolved, `len`
-//! so [`OsBinary::find_dict`] can skip past values during key lookups
-//! without re-walking their interiors. Callers see only `Item { offset }`
-//! handles; the lengths stay internal to the decoder.
+//! Emit order equals byte-stream order: a container is appended to
+//! objsArray at its tag, and its children follow inline, so object
+//! #N's tag is simply the (N+1)-th non-Object tag in the stream. Our
+//! parser exploits that instead of materialising the array: one flat
+//! validation walk over the blob records a fixed-size table of
+//! checkpoints (the offset of every `stride`-th object, `stride`
+//! doubling whenever the table fills, so any blob size fits). A
+//! back-ref resolves by jumping to the nearest checkpoint and
+//! flat-scanning at most `stride − 1` tags forward. Value-skipping in
+//! [`OsBinary::find_dict`] re-walks the value's subtree — O(subtree
+//! bytes), the same order as the lookup's own scan. Callers see only
+//! `Item { offset }` handles.
 
 
 // ── Tag bits ────────────────────────────────────────────────────────────────
@@ -85,16 +92,18 @@ fn read_tag(blob: &[u8], offset: u32) -> Option<Tag> {
 // ── Decoder ─────────────────────────────────────────────────────────────────
 
 /// Successfully parsed OSSerializeBinary blob. Holds a borrow of the
-/// blob plus the caller's `objs` scratch (filled by `parse`).
+/// blob plus the caller's checkpoint scratch (filled by `parse`).
 ///
-/// All query methods are O(blob walk) at worst — small for IORegistry
-/// data (few KB).
+/// All query methods are O(blob walk) at worst — one linear pass over
+/// the sub-blob they touch.
 pub struct OsBinary<'a> {
     blob: &'a [u8],
-    /// `(offset_in_blob, total_byte_length)` for each emitted item, in
-    /// emit order. Object back-references index into this array.
-    /// Containers' `len` covers their tag plus all nested children.
-    objs: &'a [(u32, u32)],
+    /// `ckpts[i]` = offset of emitted object `#(i * stride)`. Every
+    /// multiple of `stride` below `count` is present.
+    ckpts: &'a [u32],
+    stride: u64,
+    /// Total emitted objects in the blob (Object back-refs excluded).
+    count: u32,
 }
 
 /// Handle to one item inside the parsed blob — just an offset into
@@ -107,38 +116,46 @@ pub struct Item {
 }
 
 impl<'a> OsBinary<'a> {
-    /// Parse `blob`, filling `objs_buf` with one entry per emitted item.
-    /// `objs_buf` must be at least as long as the number of items in the
-    /// blob; for IORegistry data 1024 entries (8 KB scratch) is
-    /// comfortably above the highest-fan-out dict we encounter on AGX.
-    /// Returns `None` if the magic is wrong, the blob is truncated, or
-    /// `objs_buf` overflows.
-    pub fn parse(blob: &'a [u8], objs_buf: &'a mut [(u32, u32)]) -> Option<Self> {
-        if blob.len() < 8 || blob[..4] != MAGIC { return None; }
-        let mut state = ParseState { blob, cursor: 4, objs: objs_buf, count: 0 };
+    /// Parse `blob`, validating its structure and filling `ckpts_buf`
+    /// with object-offset checkpoints. Any non-empty buffer handles any
+    /// blob (the checkpoint stride doubles when the table fills); a
+    /// bigger buffer only makes back-ref resolution walk less. Returns
+    /// `None` if the magic is wrong, the blob is truncated, or a
+    /// back-ref points at a not-yet-emitted object.
+    pub fn parse(blob: &'a [u8], ckpts_buf: &'a mut [u32]) -> Option<Self> {
+        if blob.len() < 8 || blob[..4] != MAGIC || ckpts_buf.is_empty() {
+            return None;
+        }
+        // Offsets are u32; refuse blobs that could overflow the cursor.
+        if blob.len() >= u32::MAX as usize - 16 { return None; }
         // Top-level item — must be a Dict for any IORegistry property
         // blob, but the parser doesn't enforce that here; callers can
         // ask for the root and check its type.
-        state.parse_one()?;
-        let count = state.count;
-        Some(OsBinary { blob, objs: &objs_buf[..count] })
+        let (n, stride, count) = {
+            let mut ck = Ckpts { buf: &mut *ckpts_buf, n: 0, stride: 1 };
+            let (_end, count) = walk(blob, 4, Some(&mut ck))?;
+            (ck.n, ck.stride, count)
+        };
+        let ckpts: &'a [u32] = &ckpts_buf[..n];
+        Some(OsBinary { blob, ckpts, stride, count })
     }
 
     /// Top-level item — typically a Dict. Always at offset 4 (just past
     /// the magic).
     pub fn root(&self) -> Option<Item> {
-        if self.objs.is_empty() { return None; }
-        Some(Item { offset: self.objs[0].0 })
+        if self.count == 0 { return None; }
+        Some(Item { offset: 4 })
     }
 
     /// In a Dict, find the value associated with a Symbol key whose
     /// bytes match `key` (no trailing NUL — we strip it during compare).
-    /// Both fresh `Symbol` keys and `Object` back-refs to a Symbol are
-    /// resolved.
+    /// `Object` back-refs are resolved on the dict itself and on each
+    /// Symbol key.
     pub fn find_dict(&self, dict: Item, key: &[u8]) -> Option<Item> {
-        let tag = read_tag(self.blob, dict.offset)?;
+        let dict_off = self.resolve(dict.offset)?;
+        let tag = read_tag(self.blob, dict_off)?;
         if tag.ty != TYPE_DICT { return None; }
-        let mut cursor = dict.offset + 4;
+        let mut cursor = dict_off + 4;
         for _ in 0..tag.operand {
             let key_off = cursor;
             cursor += self.item_len(key_off)?;
@@ -152,12 +169,13 @@ impl<'a> OsBinary<'a> {
         None
     }
 
-    /// Iterate each element of an Array/Set, calling `f` with that
-    /// element's `Item`.
+    /// Iterate each element of an Array/Set (or an Object back-ref to
+    /// one), calling `f` with that element's `Item`.
     pub fn for_each_array(&self, arr: Item, mut f: impl FnMut(Item)) -> Option<()> {
-        let tag = read_tag(self.blob, arr.offset)?;
+        let arr_off = self.resolve(arr.offset)?;
+        let tag = read_tag(self.blob, arr_off)?;
         if tag.ty != TYPE_ARRAY && tag.ty != TYPE_SET { return None; }
-        let mut cursor = arr.offset + 4;
+        let mut cursor = arr_off + 4;
         for _ in 0..tag.operand {
             let item_off = cursor;
             let item_len = self.item_len(item_off)?;
@@ -219,16 +237,36 @@ impl<'a> OsBinary<'a> {
     }
 
     /// Resolve an Object back-ref to its target offset; pass-through
-    /// for direct items. Returns `None` if the target offset doesn't
-    /// land in `objs` (corrupt blob).
+    /// for direct items. Returns `None` if the ref index is out of
+    /// range (corrupt blob — `parse` already rejects these).
     fn resolve(&self, offset: u32) -> Option<u32> {
         let tag = read_tag(self.blob, offset)?;
         if tag.ty == TYPE_OBJECT {
-            let idx = tag.operand as usize;
-            if idx >= self.objs.len() { return None; }
-            Some(self.objs[idx].0)
+            self.nth_object(tag.operand)
         } else {
             Some(offset)
+        }
+    }
+
+    /// Offset of emitted object `#idx`: jump to the nearest checkpoint
+    /// at or below it, then flat-scan forward counting non-Object tags
+    /// (emit order equals stream order — see the module doc). At most
+    /// `stride − 1` objects (plus interleaved back-ref tags) are
+    /// stepped over.
+    fn nth_object(&self, idx: u32) -> Option<u32> {
+        if idx >= self.count { return None; }
+        let ck = (idx as u64 / self.stride) as usize;
+        let mut offset = *self.ckpts.get(ck)?;
+        let mut i = (ck as u64 * self.stride) as u32;
+        loop {
+            let tag = read_tag(self.blob, offset)?;
+            if tag.ty == TYPE_OBJECT {
+                offset += 4; // refs emit nothing; skip
+                continue;
+            }
+            if i == idx { return Some(offset); }
+            i += 1;
+            offset += scalar_step(tag)?;
         }
     }
 
@@ -237,15 +275,10 @@ impl<'a> OsBinary<'a> {
     /// always 4 (the back-ref tag itself) — *not* the length of the
     /// referenced item.
     fn item_len(&self, offset: u32) -> Option<u32> {
-        // Object back-refs aren't in `objs`; they're always 4 bytes.
         let tag = read_tag(self.blob, offset)?;
         if tag.ty == TYPE_OBJECT { return Some(4); }
-        // Everything else is — and `objs` is sorted by offset (stream
-        // emit order), so binary-search.
-        match self.objs.binary_search_by_key(&offset, |&(o, _)| o) {
-            Ok(idx) => Some(self.objs[idx].1),
-            Err(_) => None,
-        }
+        let (end, _count) = walk(self.blob, offset, None)?;
+        Some(end - offset)
     }
 
     fn symbol_bytes(&self, offset: u32) -> Option<&'a [u8]> {
@@ -262,72 +295,96 @@ impl<'a> OsBinary<'a> {
 
 // ── Parser ──────────────────────────────────────────────────────────────────
 
-struct ParseState<'a, 'b> {
-    blob: &'a [u8],
-    cursor: u32,
-    objs: &'b mut [(u32, u32)],
-    count: usize,
+/// Fixed-capacity checkpoint table being built during `walk`. Records
+/// the offset of every `stride`-th emitted object; when the table
+/// fills, the stride doubles and every other entry is dropped in
+/// place, so a fixed buffer covers any object count.
+struct Ckpts<'b> {
+    buf: &'b mut [u32],
+    n: usize,
+    stride: u64,
 }
 
-impl ParseState<'_, '_> {
-    /// Parse one item starting at `self.cursor`. Advances cursor past
-    /// it (including all nested children for containers) and appends an
-    /// `objs` entry for everything except Object back-refs.
-    fn parse_one(&mut self) -> Option<()> {
-        let start = self.cursor;
-        let tag = read_tag(self.blob, start)?;
-        self.cursor += 4;
-
-        match tag.ty {
-            TYPE_DICT | TYPE_ARRAY | TYPE_SET => {
-                // Reserve our objs slot first so the index matches our
-                // emit order; fill the length in after the children walk.
-                let idx = self.append(start, 0)?;
-                let multiplier = if tag.ty == TYPE_DICT { 2 } else { 1 };
-                for _ in 0..(tag.operand as u64 * multiplier) {
-                    self.parse_one()?;
-                }
-                self.objs[idx].1 = self.cursor - start;
+impl Ckpts<'_> {
+    fn record(&mut self, count: u32, offset: u32) {
+        if count as u64 % self.stride != 0 { return; }
+        if self.n == self.buf.len() {
+            // Halve the density: keep entries at even indices — those
+            // are exactly the multiples of the doubled stride.
+            let mut w = 0;
+            let mut r = 0;
+            while r < self.n {
+                self.buf[w] = self.buf[r];
+                w += 1;
+                r += 2;
             }
-            TYPE_NUMBER => {
-                // Always 8 bytes payload, regardless of tag.operand
-                // (which is the bit-width: 8/16/32/64).
-                if self.cursor as usize + 8 > self.blob.len() { return None; }
-                self.cursor += 8;
-                self.append(start, 12)?;
-            }
-            TYPE_SYMBOL | TYPE_STRING | TYPE_DATA => {
-                // `tag.operand` is the byte length (24-bit field, so ≤ 16 MB).
-                // Use checked arithmetic anyway: a malformed blob with operand
-                // close to its 24-bit ceiling could otherwise wrap during
-                // alignment + the `4 + pad` total computation, leaving us
-                // with cursor stuck and a bogus item length.
-                let pad = tag.operand.checked_add(3)? & !3;
-                let total = pad.checked_add(4)?;
-                if (self.cursor as usize).checked_add(pad as usize)? > self.blob.len() {
-                    return None;
-                }
-                self.cursor += pad;
-                self.append(start, total)?;
-            }
-            TYPE_BOOLEAN => {
-                self.append(start, 4)?;
-            }
-            TYPE_OBJECT => {
-                // No payload; not appended to objs.
-            }
-            _ => return None,
+            self.n = w;
+            self.stride *= 2;
+            // `count` was a multiple of the old stride; it may not be
+            // one of the new.
+            if count as u64 % self.stride != 0 { return; }
         }
-        Some(())
+        self.buf[self.n] = offset;
+        self.n += 1;
     }
+}
 
-    fn append(&mut self, offset: u32, len: u32) -> Option<usize> {
-        if self.count >= self.objs.len() { return None; }
-        let idx = self.count;
-        self.objs[idx] = (offset, len);
-        self.count += 1;
-        Some(idx)
+/// Total byte size of the scalar item with tag `tag` (tag word plus
+/// padded payload). Containers step 4: their children follow inline
+/// and are walked as their own items.
+#[inline]
+fn scalar_step(tag: Tag) -> Option<u32> {
+    match tag.ty {
+        TYPE_DICT | TYPE_ARRAY | TYPE_SET | TYPE_BOOLEAN => Some(4),
+        // Always 8 bytes payload, regardless of tag.operand (which is
+        // the bit-width: 8/16/32/64).
+        TYPE_NUMBER => Some(12),
+        // `tag.operand` is the byte length (24-bit field, so ≤ 16 MB).
+        // Checked arithmetic anyway: an operand near its 24-bit ceiling
+        // could otherwise wrap during alignment + the `4 + pad` total.
+        TYPE_SYMBOL | TYPE_STRING | TYPE_DATA => {
+            (tag.operand.checked_add(3)? & !3).checked_add(4)
+        }
+        _ => None,
     }
+}
+
+/// Walk the item at `start` (with all nested children), validating
+/// tags and bounds. Returns `(end_offset, emitted_object_count)`.
+///
+/// Flat, no recursion: `remaining` counts items still owed to
+/// enclosing containers — a container consumes one slot and adds its
+/// child count. With `ck` present (the `parse` walk), checkpoints are
+/// recorded and Object back-refs are validated against emit order
+/// (xnu only ever emits refs to previously serialized objects); with
+/// `None` (skipping a sub-item), refs were already validated by parse.
+fn walk(blob: &[u8], start: u32, mut ck: Option<&mut Ckpts<'_>>) -> Option<(u32, u32)> {
+    let mut cursor = start;
+    let mut remaining: u64 = 1;
+    let mut count: u32 = 0;
+    while remaining > 0 {
+        let tag = read_tag(blob, cursor)?;
+        remaining -= 1;
+        if tag.ty == TYPE_OBJECT {
+            if ck.is_some() && tag.operand >= count { return None; }
+            cursor += 4; // no payload; emits nothing
+            continue;
+        }
+        if let TYPE_DICT | TYPE_ARRAY | TYPE_SET = tag.ty {
+            let mult = if tag.ty == TYPE_DICT { 2 } else { 1 };
+            remaining = remaining.checked_add(tag.operand as u64 * mult)?;
+        }
+        let step = scalar_step(tag)?;
+        if (cursor as usize).checked_add(step as usize)? > blob.len() {
+            return None;
+        }
+        if let Some(ck) = ck.as_deref_mut() {
+            ck.record(count, cursor);
+        }
+        count = count.checked_add(1)?;
+        cursor += step;
+    }
+    Some((cursor, count))
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -356,8 +413,8 @@ mod tests {
     #[test]
     fn parses_root_dict_with_one_pair() {
         let blob = k_eq_7();
-        let mut objs = vec![(0u32, 0u32); 16];
-        let bin = OsBinary::parse(&blob, &mut objs).expect("parse");
+        let mut ckpts = vec![0u32; 16];
+        let bin = OsBinary::parse(&blob, &mut ckpts).expect("parse");
         let root = bin.root().expect("root");
         let v = bin.find_dict(root, b"k").expect("find k");
         assert_eq!(bin.as_number(v), Some(7));
@@ -367,8 +424,8 @@ mod tests {
     fn rejects_wrong_magic() {
         let mut bad = k_eq_7();
         bad[0] = 0;
-        let mut objs = vec![(0u32, 0u32); 16];
-        assert!(OsBinary::parse(&bad, &mut objs).is_none());
+        let mut ckpts = vec![0u32; 16];
+        assert!(OsBinary::parse(&bad, &mut ckpts).is_none());
     }
 
     /// Object back-references — emit a Symbol "k", a Number, then a
@@ -393,8 +450,8 @@ mod tests {
         b.extend_from_slice(&11u32.to_le_bytes());
         b.extend_from_slice(&0u32.to_le_bytes());
 
-        let mut objs = vec![(0u32, 0u32); 16];
-        let bin = OsBinary::parse(&b, &mut objs).expect("parse");
+        let mut ckpts = vec![0u32; 16];
+        let bin = OsBinary::parse(&b, &mut ckpts).expect("parse");
         // Both back-ref'd "kA" lookups should resolve. find_dict picks
         // the first match — to actually verify the back-ref path, we
         // walk pairs manually.
@@ -459,8 +516,8 @@ mod tests {
     #[test]
     fn agx_matching_blob_decodes_to_expected_dict() {
         use crate::mac_sys::AGX_MATCHING_BLOB;
-        let mut objs = vec![(0u32, 0u32); 32];
-        let bin = OsBinary::parse(&AGX_MATCHING_BLOB, &mut objs)
+        let mut ckpts = vec![0u32; 32];
+        let bin = OsBinary::parse(&AGX_MATCHING_BLOB, &mut ckpts)
             .expect("AGX_MATCHING_BLOB should parse");
         let root = bin.root().expect("root present");
         let root_tag = read_tag(&AGX_MATCHING_BLOB, root.offset).unwrap();
@@ -473,9 +530,9 @@ mod tests {
 
     #[test]
     fn rejects_blob_truncated_after_magic() {
-        let mut objs = vec![(0u32, 0u32); 4];
+        let mut ckpts = vec![0u32; 4];
         // Just the magic, nothing else.
-        assert!(OsBinary::parse(&MAGIC, &mut objs).is_none());
+        assert!(OsBinary::parse(&MAGIC, &mut ckpts).is_none());
     }
 
     #[test]
@@ -485,8 +542,8 @@ mod tests {
         b.extend_from_slice(&MAGIC);
         emit_tag(&mut b, TYPE_SYMBOL, 4, false);
         b.push(b'x');                // 1 byte instead of 4
-        let mut objs = vec![(0u32, 0u32); 4];
-        assert!(OsBinary::parse(&b, &mut objs).is_none());
+        let mut ckpts = vec![0u32; 4];
+        assert!(OsBinary::parse(&b, &mut ckpts).is_none());
     }
 
     #[test]
@@ -498,8 +555,8 @@ mod tests {
         emit_tag(&mut b, TYPE_DICT, 5, false);
         emit_symbol(&mut b, b"k", false);
         emit_number(&mut b, 1, true);
-        let mut objs = vec![(0u32, 0u32); 16];
-        assert!(OsBinary::parse(&b, &mut objs).is_none());
+        let mut ckpts = vec![0u32; 16];
+        assert!(OsBinary::parse(&b, &mut ckpts).is_none());
     }
 
     #[test]
@@ -516,34 +573,80 @@ mod tests {
         // proxy for "absurdly large" operand.
         emit_tag(&mut b, TYPE_SYMBOL, 0x00ff_fffd, false);
         // No payload follows — bounds check should fire.
-        let mut objs = vec![(0u32, 0u32); 4];
-        assert!(OsBinary::parse(&b, &mut objs).is_none());
+        let mut ckpts = vec![0u32; 4];
+        assert!(OsBinary::parse(&b, &mut ckpts).is_none());
     }
 
     #[test]
     fn rejects_object_back_ref_with_out_of_range_index() {
-        // Dict { Object(99) : Number(7) } — back-ref points past objs.
+        // Dict { Object(99) : Number(7) } — back-ref to an object that
+        // hasn't been emitted. xnu never produces forward refs, so
+        // parse rejects the blob outright.
         let mut b = Vec::new();
         b.extend_from_slice(&MAGIC);
         emit_tag(&mut b, TYPE_DICT, 1, false);
         emit_tag(&mut b, TYPE_OBJECT, 99, false);
         emit_number(&mut b, 7, true);
-        let mut objs = vec![(0u32, 0u32); 16];
-        let bin = OsBinary::parse(&b, &mut objs).expect("structure parses fine");
-        let root = bin.root().unwrap();
-        // find_dict resolves the key via Object(99) → out-of-range,
-        // fails the symbol comparison, returns None.
-        assert_eq!(bin.find_dict(root, b"anything"), None);
+        let mut ckpts = vec![0u32; 16];
+        assert!(OsBinary::parse(&b, &mut ckpts).is_none());
     }
 
     #[test]
-    fn rejects_objs_buf_overflow() {
-        // Buffer too small to hold all the items in the blob.
+    fn one_slot_checkpoint_buffer_handles_any_blob() {
+        // The checkpoint stride doubles when the table fills, so even a
+        // single-slot buffer parses a multi-item blob — resolution just
+        // scans from the first object.
         let blob = k_eq_7();
-        // k_eq_7 emits: Dict, Symbol, Number → 3 items. A 1-slot buffer
-        // overflows on the second append.
-        let mut objs = vec![(0u32, 0u32); 1];
-        assert!(OsBinary::parse(&blob, &mut objs).is_none());
+        let mut ckpts = vec![0u32; 1];
+        let bin = OsBinary::parse(&blob, &mut ckpts).expect("parse");
+        let root = bin.root().expect("root");
+        assert_eq!(bin.as_number(bin.find_dict(root, b"k").unwrap()), Some(7));
+    }
+
+    /// Force several stride doublings and check back-refs still resolve
+    /// to the right objects: a dict of 200 unique (symbol, number)
+    /// pairs, then one pair whose key back-refs an early symbol and
+    /// whose value back-refs a late number. Parsed with a 4-slot
+    /// checkpoint table (stride ends at 128) and a large one; both must
+    /// agree.
+    #[test]
+    fn stride_doubling_resolves_back_refs_exactly() {
+        let mut b = Vec::new();
+        b.extend_from_slice(&MAGIC);
+        emit_tag(&mut b, TYPE_DICT, 201, false);
+        for i in 0..200u32 {
+            // Symbols "s000".."s199", values 1000..1199. Emit order:
+            // dict = #0, symbol i = #(1 + 2i), number i = #(2 + 2i).
+            let name = format!("s{i:03}");
+            emit_symbol(&mut b, name.as_bytes(), false);
+            emit_number(&mut b, 1000 + i as u64, false);
+        }
+        // Key: back-ref to symbol "s007" (object #15). Value: back-ref
+        // to number 1198 (object #398).
+        emit_tag(&mut b, TYPE_OBJECT, 15, false);
+        emit_tag(&mut b, TYPE_OBJECT, 398, true);
+
+        for slots in [4usize, 512] {
+            let mut ckpts = vec![0u32; slots];
+            let bin = OsBinary::parse(&b, &mut ckpts).expect("parse");
+            let root = bin.root().unwrap();
+            assert_eq!(bin.as_number(bin.find_dict(root, b"s042").unwrap()),
+                       Some(1042), "slots={slots}");
+            // find_dict returns the FIRST match for s007 — the direct
+            // pair. Walk to the final pair manually to hit both refs.
+            let mut cursor = root.offset + 4;
+            for _ in 0..200 {
+                cursor += bin.item_len(cursor).unwrap();  // key
+                cursor += bin.item_len(cursor).unwrap();  // value
+            }
+            let key_off = cursor;
+            cursor += bin.item_len(key_off).unwrap();
+            let val_off = cursor;
+            assert_eq!(bin.symbol_bytes(key_off), Some(&b"s007"[..]),
+                       "slots={slots}");
+            assert_eq!(bin.as_number(Item { offset: val_off }), Some(1198),
+                       "slots={slots}");
+        }
     }
 
     #[test]
@@ -556,8 +659,8 @@ mod tests {
         emit_tag(&mut b, TYPE_BOOLEAN, 1, false);
         emit_symbol(&mut b, b"f", false);
         emit_tag(&mut b, TYPE_BOOLEAN, 0, true);
-        let mut objs = vec![(0u32, 0u32); 16];
-        let bin = OsBinary::parse(&b, &mut objs).expect("parse");
+        let mut ckpts = vec![0u32; 16];
+        let bin = OsBinary::parse(&b, &mut ckpts).expect("parse");
         let root = bin.root().unwrap();
         assert_eq!(bin.as_bool(bin.find_dict(root, b"t").unwrap()), Some(true));
         assert_eq!(bin.as_bool(bin.find_dict(root, b"f").unwrap()), Some(false));
@@ -612,8 +715,13 @@ mod tests {
         let buf = io_registry_entry_get_properties_bin(entry).expect("props_bin");
         let blob = buf.as_bytes();
 
-        let mut objs = vec![(0u32, 0u32); 4096];
-        let bin = OsBinary::parse(blob, &mut objs).expect("parse OK");
+        // Deliberately small: the real AGXAccelerator blob has ~2000+
+        // objects (IOReportLegend dominates), so 64 slots force several
+        // stride doublings — this is the regression test for the old
+        // fixed 1024-entry index, which overflowed on exactly this blob
+        // and silently zeroed the GPU used-memory readout.
+        let mut ckpts = vec![0u32; 64];
+        let bin = OsBinary::parse(blob, &mut ckpts).expect("parse OK");
 
         let root = bin.root().expect("root");
         let perf = bin.find_dict(root, b"PerformanceStatistics")
