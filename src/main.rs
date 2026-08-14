@@ -541,11 +541,17 @@ pub unsafe extern "C" fn mac_run_then_exit(flags: u64, pid: i32) -> ! {
 #[cfg(not(test))]
 pub(crate) fn run(flags: u64) {
     let once = flags & FLAG_ONCE != 0;
-    // `sysconf(_SC_PAGESIZE)` on x86_64 Linux is always 4096; `_SC_CLK_TCK`
-    // is ABI-fixed at 100 regardless of kernel HZ. Skip the sysconf
-    // roundtrip — it's a libc wrapper that touches TLS for errno on the
-    // error path, and the production build has no TLS set up.
-    let page_size: u64 = 4096;
+    // `_SC_CLK_TCK` is ABI-fixed at 100 regardless of kernel HZ — no
+    // sysconf roundtrip needed (a libc wrapper that touches TLS for
+    // errno, and the production build has no TLS). The page size is
+    // real state though: /proc reports RSS in kernel pages and aarch64
+    // kernels ship 4 K/16 K/64 K, so it comes from auxv AT_PAGESZ via
+    // `syscall::page`.
+    #[cfg(target_os = "linux")]
+    let page_size: u64 = syscall::page::get() as u64;
+    // Unused on mac: RSS arrives in bytes (pti_resident_size).
+    #[cfg(target_os = "macos")]
+    let page_size: u64 = 0;
     let clock_ticks: f64 = 100.0;
     let num_cpus = num_cpus_online();
 

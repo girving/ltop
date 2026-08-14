@@ -1277,3 +1277,86 @@ mod tests {
         assert!(buf.starts_with(b"Linux"), "first field is not 'Linux': {:?}", &buf[..16]);
     }
 }
+
+// ── Page size (Linux) ────────────────────────────────────────────────────────
+
+/// Kernel page size. Not a constant on Linux: aarch64 kernels ship
+/// with 4 KB, 16 KB (Asahi), or 64 KB (RHEL-alt) pages, and both the
+/// RSS math (`/proc/*/stat` reports RSS in kernel pages) and every
+/// `madvise` alignment depend on the real value.
+#[cfg(target_os = "linux")]
+pub mod page {
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    /// auxv key for the page size (`AT_PAGESZ`, elf.h).
+    pub const AT_PAGESZ: i64 = 6;
+
+    static PAGE_SIZE: AtomicUsize = AtomicUsize::new(0);
+
+    /// Record the auxv-provided page size. Only plausible values stick
+    /// (power of two in 1 KB..=1 MB); anything else leaves the lazy
+    /// fallback in charge.
+    pub fn set(size: u64) {
+        if size.is_power_of_two() && (1024..=1 << 20).contains(&size) {
+            PAGE_SIZE.store(size as usize, Ordering::Relaxed);
+        }
+    }
+
+    /// The libc-free build stores AT_PAGESZ in `start.rs::ltop_entry`
+    /// before anything pages (the stack-VMA madvise walk needs it);
+    /// glibc test/dev builds land in the lazy branch, which reads the
+    /// same auxv pairs from /proc/self/auxv.
+    pub fn get() -> usize {
+        let p = PAGE_SIZE.load(Ordering::Relaxed);
+        if p != 0 { return p; }
+        if let Some(v) = from_proc_auxv() { set(v as u64); }
+        let p = PAGE_SIZE.load(Ordering::Relaxed);
+        if p != 0 { return p; }
+        PAGE_SIZE.store(4096, Ordering::Relaxed);
+        4096
+    }
+
+    // In the libc-free build ltop_entry always pre-stores, so the
+    // lazy reader would be dead bytes — cfg it away.
+    #[cfg(libc_free)]
+    fn from_proc_auxv() -> Option<usize> { None }
+
+    /// `/proc/self/auxv` is the kernel's (a_type, a_val) u64 pairs,
+    /// AT_NULL-terminated — the same data the initial stack carries.
+    #[cfg(not(libc_free))]
+    fn from_proc_auxv() -> Option<usize> {
+        let fd = super::open_cstr(
+            c"/proc/self/auxv",
+            super::O_RDONLY | super::O_CLOEXEC,
+        );
+        if fd < 0 { return None; }
+        let mut buf = [0u8; 1024];
+        let n = super::read_buf(fd, &mut buf);
+        super::close(fd);
+        let n = if n > 0 { n as usize } else { 0 };
+        let mut i = 0usize;
+        while i + 16 <= n {
+            let key = u64::from_ne_bytes(buf[i..i + 8].try_into().ok()?);
+            let val = u64::from_ne_bytes(buf[i + 8..i + 16].try_into().ok()?);
+            if key == 0 { break; }
+            if key == AT_PAGESZ as u64 { return Some(val as usize); }
+            i += 16;
+        }
+        None
+    }
+
+    /// `/proc/self/smaps`' KernelPageSize is an independent kernel
+    /// report of the same value (in kB).
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn page_size_matches_smaps() {
+            let smaps = std::fs::read_to_string("/proc/self/smaps").unwrap();
+            let line = smaps.lines()
+                .find(|l| l.starts_with("KernelPageSize:"))
+                .expect("KernelPageSize line in smaps");
+            let kb: usize = line.split_whitespace().nth(1).unwrap().parse().unwrap();
+            assert_eq!(super::get(), kb * 1024);
+        }
+    }
+}

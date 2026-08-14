@@ -440,21 +440,24 @@ pub fn uncommit_tail() {
 
 #[cfg(target_os = "linux")]
 pub fn uncommit_tail() {
-    // Page size: 4 KB on every x86_64 Linux kernel we target. Querying
-    // `sysconf(_SC_PAGESIZE)` would make this future-proof at the cost of
-    // one extra syscall per tick (vs the one we actually want to make).
-    const PAGE_SIZE: usize = 4096;
+    // Real kernel page size (auxv AT_PAGESZ via syscall::page): the
+    // kernel requires madvise's start to be page-aligned and rounds
+    // the length UP to a page multiple (mm/madvise.c do_madvise), so
+    // a hardcoded 4096 on a 16 K/64 K-page aarch64 kernel would either
+    // EINVAL every tick or DONTNEED past the arena into `offset`.
+    let page_size = crate::syscall::page::get();
     // ARENA's base address isn't page-aligned (the struct itself is only
     // align(16)), so we have to round the *process address*, not the arena
     // offset, to the next page boundary. Rounding the offset would give a
     // non-page-aligned process address and madvise would fail with EINVAL.
     let base = ARENA.buf.get() as usize;
     let current_addr = base + ARENA.offset.get() as usize;
-    let tail_start = (current_addr + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+    let tail_start = (current_addr + page_size - 1) & !(page_size - 1);
     let arena_end = base + SIZE;
     // Round length down to a whole-page multiple so we don't spill past the
-    // arena's last byte (madvise only cares about complete pages anyway).
-    let len = (arena_end.saturating_sub(tail_start)) & !(PAGE_SIZE - 1);
+    // arena's last byte (madvise rounds up, so an unrounded tail would
+    // zero the pages holding `offset` and following statics).
+    let len = (arena_end.saturating_sub(tail_start)) & !(page_size - 1);
     if len > 0 {
         // SAFETY: [tail_start .. tail_start + len) is fully inside the
         // arena's backing storage and page-aligned at both ends.

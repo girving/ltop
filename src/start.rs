@@ -41,8 +41,6 @@
 
 use crate::syscall;
 
-const PAGE: u64 = 4096;
-
 // ── assembly _start ─────────────────────────────────────────────────────────
 //
 // On entry (both archs): the kernel hands us `sp` pointing at argc,
@@ -111,6 +109,27 @@ pub unsafe extern "C" fn ltop_entry(sp: *const i64) -> ! {
     // anything else.
     let flags = unsafe { crate::parse_args(argc, argv) };
 
+    // Read AT_PAGESZ from auxv — it lies past argv (argc entries +
+    // NULL) and envp (up to its NULL) as (a_type, a_val) i64 pairs,
+    // AT_NULL-terminated. This must happen BEFORE the madvise walk
+    // below: probe addresses have to be aligned to the real kernel
+    // page size (aarch64 kernels ship 4 K, 16 K on Asahi, 64 K on
+    // RHEL-alt; a 4 K-aligned probe on a 16 K kernel is EINVAL, which
+    // the walk would misread as the VMA boundary).
+    let mut q = unsafe { sp.add(1 + argc as usize + 1) };
+    while unsafe { *q } != 0 { q = unsafe { q.add(1) }; }
+    let mut aux = unsafe { q.add(1) };
+    loop {
+        let key = unsafe { *aux };
+        if key == 0 { break; }
+        if key == crate::syscall::page::AT_PAGESZ {
+            crate::syscall::page::set(unsafe { *aux.add(1) } as u64);
+            break;
+        }
+        aux = unsafe { aux.add(2) };
+    }
+    let page = crate::syscall::page::get() as u64;
+
     // Walk upward from sp's page, dropping each mapped page via
     // `madvise(DONTNEED)`. The last success address is the top page
     // of the stack VMA; the first failure terminates. Since nothing
@@ -120,16 +139,16 @@ pub unsafe extern "C" fn ltop_entry(sp: *const i64) -> ! {
     // dropped are zero-filled-on-demand the moment we touch them
     // below (via the tail-jump), so the content going to zero here
     // is exactly what we want.
-    let sp_page = sp as u64 & !(PAGE - 1);
+    let sp_page = sp as u64 & !(page - 1);
     let mut last_mapped = sp_page;
-    let mut p = sp_page + PAGE;
-    while drop_one(p) { last_mapped = p; p += PAGE; }
+    let mut p = sp_page + page;
+    while drop_one(p, page) { last_mapped = p; p += page; }
 
     // New rsp: 16 B below the top of the last mapped page. SysV /
-    // AAPCS want sp 16-aligned at a call target; `page + PAGE - 16`
-    // puts us there with ~4080 B of headroom in the current page,
-    // enough for ltop's peak 2 KB stack use to fit inside one page.
-    let new_rsp = last_mapped + PAGE - 16;
+    // AAPCS want sp 16-aligned at a call target; `top - 16` puts us
+    // there with page_size - 16 bytes of headroom (≥ 4080 B), enough
+    // for ltop's peak 2 KB stack use to fit inside one page.
+    let new_rsp = last_mapped + page - 16;
 
     // Tail-jump to ltop_main on the fresh rsp. `flags` rides across
     // in the first-arg register (rdi / x0) so we don't have to stash
@@ -179,8 +198,9 @@ pub unsafe extern "C" fn ltop_main(flags: u64) -> ! {
     // sweeps through the old kernel sp-page (ltop_entry's frame) and
     // any intermediate pages that were never madvise'd during the
     // upward walk.
-    let mut p = (cur_sp & !(PAGE - 1)).wrapping_sub(PAGE);
-    while p != 0 && drop_one(p) { p = p.wrapping_sub(PAGE); }
+    let page = crate::syscall::page::get() as u64; // stored by ltop_entry
+    let mut p = (cur_sp & !(page - 1)).wrapping_sub(page);
+    while p != 0 && drop_one(p, page) { p = p.wrapping_sub(page); }
 
     super::run(flags);
     syscall::exit_group(0)
@@ -190,6 +210,6 @@ pub unsafe extern "C" fn ltop_main(flags: u64) -> ! {
 /// mapped (drop succeeded), `false` on `-ENOMEM` (unmapped, i.e.
 /// we've walked past a VMA boundary).
 #[inline]
-fn drop_one(addr: u64) -> bool {
-    unsafe { syscall::madvise(addr as *mut u8, PAGE as usize, syscall::MADV_DONTNEED) == 0 }
+fn drop_one(addr: u64, page: u64) -> bool {
+    unsafe { syscall::madvise(addr as *mut u8, page as usize, syscall::MADV_DONTNEED) == 0 }
 }
