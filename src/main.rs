@@ -568,8 +568,14 @@ pub(crate) fn run(flags: u64) {
         let rm_state = gpu::init(init);
         let has_gpu = rm_state.has_gpu();
 
-        // One-shot startup is done; lock down the syscall surface for the tick loop.
-        #[cfg(all(target_os = "linux", libc_free))]
+        // One-shot startup is done; lock down the syscall surface for the
+        // tick loop. Not under arena-trace: the tracer writes every arena
+        // event to ./arena-trace.log (fd > 2), and the seccomp write
+        // filter only allows fds 1 and 2 — the first traced tick would
+        // die with SIGSYS mid-frame, silently truncating the trace the
+        // arena-svg workflow consumes. An instrumented build isn't a
+        // production binary; it runs unsandboxed.
+        #[cfg(all(target_os = "linux", libc_free, not(feature = "arena-trace")))]
         sandbox::install();
 
         // Two adjacent cross-tick FSpans, both rotated each iteration via

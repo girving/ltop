@@ -25,6 +25,71 @@ use std::process::Command;
 
 const CHILD_ENV: &str = "LTOP_SANDBOX_TEST_CHILD";
 const TEST_NAME: &str = "sandbox_install_then_seccomp_field_is_filter_mode";
+const CHILD_ENV_SIGSYS: &str = "LTOP_SANDBOX_TEST_CHILD_SIGSYS";
+const CHILD_ENV_SLEEP: &str = "LTOP_SANDBOX_TEST_CHILD_SLEEP";
+
+/// The deny action, end to end: a child installs the sandbox and then
+/// issues a syscall that is deliberately startup-only (absent from the
+/// tick allowlist). The kernel must kill the whole process with
+/// SIGSYS — the in-file BPF interpreter tests share the allowlist
+/// assumption, so only a real kernel round-trip can falsify it.
+#[test]
+fn sandbox_denied_syscall_kills_with_sigsys() {
+    if env::var(CHILD_ENV_SIGSYS).is_ok() {
+        ltop::sandbox::install();
+        let mut set = [0u64; 16];
+        let _ = ltop::syscall::sched_getaffinity_self(&mut set);
+        // Reached ⇒ the filter let a denied syscall through.
+        ltop::syscall::exit_group(13);
+    }
+    let exe = env::current_exe().expect("current_exe");
+    let status = Command::new(&exe)
+        .env(CHILD_ENV_SIGSYS, "1")
+        .args(["--exact", "sandbox_denied_syscall_kills_with_sigsys"])
+        .status()
+        .expect("failed to spawn child");
+    use std::os::unix::process::ExitStatusExt;
+    // KILL_PROCESS terminates with SIGSYS (31); under the sandbox-trap
+    // feature the SIGSYS handler prints the nr and exits 159 instead.
+    assert!(
+        status.signal() == Some(31) || status.code() == Some(159),
+        "denied syscall did not SIGSYS-kill the child: {status:?}",
+    );
+}
+
+/// SIGSTOP/SIGCONT landing in the tick loop's nanosleep makes the
+/// kernel re-enter via restart_syscall (no handler ran, so
+/// -ERESTART_RESTARTBLOCK restarts rather than EINTRs). The filter
+/// must allow that re-entry — it once didn't, and Ctrl-Z + fg killed
+/// the monitor on resume.
+#[test]
+fn sandbox_survives_stop_cont_during_nanosleep() {
+    if env::var(CHILD_ENV_SLEEP).is_ok() {
+        ltop::sandbox::install();
+        // ~3 s of 100 ms nanosleeps so the parent's STOP lands in one.
+        let ts = ltop::syscall::Timespec { tv_sec: 0, tv_nsec: 100_000_000 };
+        for _ in 0..30 {
+            unsafe { ltop::syscall::nanosleep(&ts, core::ptr::null_mut()); }
+        }
+        ltop::syscall::exit_group(0);
+    }
+    let exe = env::current_exe().expect("current_exe");
+    let mut child = Command::new(&exe)
+        .env(CHILD_ENV_SLEEP, "1")
+        .args(["--exact", "sandbox_survives_stop_cont_during_nanosleep"])
+        .spawn()
+        .expect("failed to spawn child");
+    std::thread::sleep(std::time::Duration::from_millis(700));
+    let pid = child.id().to_string();
+    for (sig, pause_ms) in [("-STOP", 300u64), ("-CONT", 0)] {
+        let ok = Command::new("kill").args([sig, &pid]).status()
+            .expect("spawn kill").success();
+        assert!(ok, "kill {sig} failed");
+        std::thread::sleep(std::time::Duration::from_millis(pause_ms));
+    }
+    let status = child.wait().expect("wait");
+    assert!(status.success(), "child died across STOP/CONT: {status:?}");
+}
 
 #[test]
 fn sandbox_install_then_seccomp_field_is_filter_mode() {

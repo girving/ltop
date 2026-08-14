@@ -38,6 +38,20 @@ jobs:
         run: |
           cargo ltop -- --check
           ls -la target/static-linux-aarch64/min/ltop
+      - name: Run a real sandboxed tick (+ STOP/CONT across nanosleep)
+        # `--check` exits before sandbox::install(), so without this no
+        # CI job ever runs a tick under the installed seccomp filter — an
+        # allowlist gap would ship silently and SIGKILL in production.
+        # `--once` renders one real frame under the filter; the
+        # STOP/CONT round-trip then pins the restart_syscall re-entry
+        # the resume produces (kill -0 fails if the filter killed us).
+        run: |
+          ./target/static-linux-aarch64/min/ltop --once > /dev/null
+          ./target/static-linux-aarch64/min/ltop > /dev/null & LTOP_PID=$!
+          sleep 1
+          kill -STOP "$LTOP_PID"; sleep 1; kill -CONT "$LTOP_PID"; sleep 2
+          kill -0 "$LTOP_PID"
+          kill -9 "$LTOP_PID"
       - name: Install via `cargo ltop --install` + smoke test
         # Exercises the install path end-to-end. CARGO_INSTALL_ROOT
         # redirects the copy to a scratch dir (never ~/.cargo/bin).

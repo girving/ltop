@@ -447,6 +447,17 @@ static PROG: [SockFilter; PROG_LEN] = build_prog();
 
 const LANDLOCK_ACCESS_FS_READ_FILE: u64 = 1 << 2; // 4
 const LANDLOCK_ACCESS_FS_READ_DIR: u64 = 1 << 3; // 8
+/// Every Landlock ABI-v1 filesystem access right (EXECUTE, WRITE_FILE,
+/// READ_*, REMOVE_*, MAKE_* — bits 0..=12, include/uapi/linux/landlock.h).
+/// Handled-but-not-granted rights are denied by the LSM, so handling
+/// the full v1 set is what makes "writes are denied at the LSM layer"
+/// true rather than resting on the seccomp openat flag filter alone.
+/// v2+ bits (REFER, TRUNCATE, IOCTL_DEV) are deliberately absent:
+/// passing a bit the running kernel doesn't know makes
+/// landlock_create_ruleset fail with EINVAL, and truncation is already
+/// unreachable (openat's flag filter denies O_TRUNC; ftruncate isn't
+/// in the syscall allowlist).
+const LANDLOCK_ACCESS_FS_ALL_V1: u64 = (1 << 13) - 1;
 
 /// Rule type: restrict accesses to a subtree under `parent_fd`.
 const LANDLOCK_RULE_PATH_BENEATH: u32 = 1;
@@ -564,7 +575,7 @@ fn install_landlock() {
     // The ruleset_attr struct is just a single u64 of access bits.
     // Inlining a u64 here saves the type definition and lets the
     // pointer cast collapse.
-    let handled: u64 = LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR;
+    let handled: u64 = LANDLOCK_ACCESS_FS_ALL_V1;
     // SAFETY: `&handled` is a valid pointer to 8 bytes the kernel
     // reads as `landlock_ruleset_attr.handled_access_fs`.
     let rs = unsafe {
@@ -633,14 +644,20 @@ fn install_sigsys_handler() {
     // 128 bytes) — kernel sigaction has the 8-byte kernel sigset_t
     // and uses sa_flags as `unsigned long`.
     //
-    // x86_64: requires SA_RESTORER + a userspace sigreturn trampoline
-    //   because the kernel doesn't ship a default one for 64-bit.
-    // aarch64: kernel uses VDSO sigreturn; no SA_RESTORER needed.
+    // The sa_restorer FIELD exists on both arches: x86_64 and arm64
+    // each define SA_RESTORER (0x04000000), which turns on
+    // __ARCH_HAS_SA_RESTORER in include/uapi/asm-generic/signal.h and
+    // places `sa_restorer` between sa_flags and sa_mask. What differs
+    // is the FLAG: x86_64 must set it with a real userspace sigreturn
+    // trampoline (no kernel default for 64-bit); aarch64 leaves the
+    // flag clear and the field 0, and the kernel falls back to the
+    // VDSO sigreturn — but it still reads sa_mask from after the
+    // restorer slot, so a struct without the field would hand the
+    // kernel 8 bytes of stack garbage as the signal mask.
     #[repr(C)]
     struct KSigAction {
         sa_handler: usize,
         sa_flags: u64,
-        #[cfg(target_arch = "x86_64")]
         sa_restorer: usize,
         sa_mask: u64,
     }
@@ -658,6 +675,8 @@ fn install_sigsys_handler() {
         sa_flags: SA_SIGINFO,
         #[cfg(target_arch = "x86_64")]
         sa_restorer: sigreturn_trampoline as usize,
+        #[cfg(not(target_arch = "x86_64"))]
+        sa_restorer: 0,
         sa_mask: 0,
     };
 
