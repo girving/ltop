@@ -1816,6 +1816,21 @@ impl<'id, T> FSpan<'id, T> {
     }
 }
 
+impl<'id> FSpan<'id, u8> {
+    /// Like [`into_small`](FSpan::into_small), but truncates to
+    /// `FSmall::MAX_LEN` (4095) instead of panicking on an over-long
+    /// span. `u8`-only: dropping the cut-off tail is a no-op, and the
+    /// one user is display strings, whose renderer truncates to the
+    /// column width anyway — an argv element can legally run to 128 KB
+    /// on Linux, which must not abort the monitor. The offset assert
+    /// stays: it's structural (arena size < MAX_OFFSET), not
+    /// input-dependent.
+    pub fn into_small_lossy(mut self) -> FSmallStr<'id> {
+        self.len = self.len.min(FSmall::<u8>::MAX_LEN);
+        self.into_small()
+    }
+}
+
 /// Packed byte slice handle — `FSmall<u8>`. ProcInfo.display's type.
 pub type FSmallStr<'id> = FSmall<'id, u8>;
 
@@ -3310,6 +3325,25 @@ mod tests {
             assert_eq!(n1.len(), 0);
             assert_eq!(n2.len(), 0);
             assert_eq!(offset(), before);
+        });
+    }
+
+    /// `into_small_lossy` truncates over-long display strings to
+    /// FSmall's 4095-byte budget instead of aborting — a single argv
+    /// element can legally run to 128 KB on Linux.
+    #[test]
+    fn into_small_lossy_truncates_overlong_display() {
+        let _g = lock();
+        scope(|f| {
+            let span = f.str("long", |b| {
+                for _ in 0..5000 { b.push(b'x'); }
+            });
+            let small = span.into_small_lossy();
+            assert_eq!(small.len(), 4095);
+            assert!(small.as_slice().iter().all(|&b| b == b'x'));
+            // Short spans pass through unchanged.
+            let short = f.str("short", |b| b.extend_from_slice(b"abc")).into_small_lossy();
+            assert_eq!(short.as_slice(), b"abc");
         });
     }
 

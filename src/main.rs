@@ -1143,7 +1143,7 @@ fn collect_procs<'a>(
             pid: pid_u, ppid, cpu, rss_kib: (rss_bytes >> 10) as u32,
             age_visible: ProcInfo::pack(age_secs, visible),
             gpu: None,
-            display: display_span.into_small(),
+            display: display_span.into_small_lossy(),
         };
     }
     (procs, next)
@@ -1386,6 +1386,12 @@ fn collect_procs<'a>(
         // persistent arena cost for cmdline or scratch.
         let mut keep = false;
         let mut visible = false;
+        // Linux permits argv+envp up to RLIMIT_STACK/4 (~2 MB at the
+        // default 8 MB stack) — far beyond the 512 KB arena, and a huge
+        // C++ link line is exactly what this monitor watches. Only the
+        // first MAX_ARGS arguments can affect the display, so cap the
+        // read; the macOS path is capped the same way via MACOS_ARG_MAX.
+        const CMDLINE_MAX: usize = 32 * 1024;
         let display: FSmallStr = frame.compact("display", |inner| {
             let mut cmdline_chunk: FBox<[u8; 4096]> = inner.alloc_zeroed("proc/cmdline_chunk");
             let cmdline: FStr = inner.str("cmdline", |b| {
@@ -1400,6 +1406,7 @@ fn collect_procs<'a>(
                     if n <= 0 { break; }
                     b.extend_from_slice(&chunk[..n as usize]);
                     if (n as usize) < chunk.len() { break; } // short read = EOF
+                    if b.len() >= CMDLINE_MAX { break; }
                 }
                 syscall::close(fd);
             });
@@ -1413,6 +1420,11 @@ fn collect_procs<'a>(
                 args_arr[args_len] = s;
                 args_len += 1;
             }
+            // A capped read can end mid-argument; a partial trailing
+            // arg could masquerade as the script/module name, so drop it.
+            if cmdline.len() >= CMDLINE_MAX && cmdline.last() != Some(&0) {
+                args_len = args_len.saturating_sub(1);
+            }
             let args = &args_arr[..args_len];
             if is_noise(comm, args) {
                 return inner.empty::<u8>();
@@ -1424,7 +1436,7 @@ fn collect_procs<'a>(
                 || gpu_pids.contains(&pid);
             keep = true;
             inner.str("display", |b| build_display_into(b, comm, args, is_related))
-        }).into_small();
+        }).into_small_lossy();
         if keep {
             procs[i] = ProcInfo { pid, ppid, cpu, rss_kib: (rss_bytes >> 10) as u32,
                                   age_visible: ProcInfo::pack(age_secs, visible),
