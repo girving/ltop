@@ -35,6 +35,10 @@ fn load_min_stack() -> Option<Vec<u8>> {
     match std::fs::read(path) {
         Ok(b) => Some(b),
         Err(_) => {
+            // Linux CI builds min-stack (`cargo stack`) before tests; the
+            // mac workflow has no stack stage, so the hard-fail gate is
+            // Linux-only.
+            #[cfg(target_os = "linux")]
             assert!(std::env::var_os("CI").is_none(),
                 "{} missing under CI — the build step must run before tests", path.display());
             eprintln!("skipping: {} not built — run `cargo stack` first", path.display());
@@ -123,6 +127,7 @@ fn rodata_before_text() {
 fn no_heap_allocator_symbols() {
     use std::process::Command;
     if !Path::new(MIN_STACK_BINARY).exists() {
+        #[cfg(target_os = "linux")]
         assert!(std::env::var_os("CI").is_none(),
             "{MIN_STACK_BINARY} missing under CI — the build step must run before tests");
         eprintln!("skipping: {MIN_STACK_BINARY} not built — run `cargo stack` first");
@@ -183,6 +188,7 @@ fn steady_state_stack_rss_one_page() {
     use std::time::Duration;
 
     if !Path::new(MIN_STACK_BINARY).exists() {
+        #[cfg(target_os = "linux")]
         assert!(std::env::var_os("CI").is_none(),
             "{MIN_STACK_BINARY} missing under CI — the build step must run before tests");
         eprintln!("skipping: {MIN_STACK_BINARY} not built — run `cargo stack` first");
