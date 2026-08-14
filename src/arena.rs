@@ -600,7 +600,12 @@ impl<'id> Frame<'id> {
         let start = (cur + (align - 1)) & !(align - 1);
         ARENA.offset.set(start);
 
-        let mut builder = FBuilder { len: 0, _marker: PhantomData };
+        let mut builder = FBuilder {
+            len: 0,
+            #[cfg(test)]
+            next: u32::MAX, // set by the first push (alignment pad unknown here)
+            _marker: PhantomData,
+        };
         build(&mut builder);
 
         #[cfg(feature = "arena-trace")]
@@ -684,96 +689,20 @@ impl<'id> Frame<'id> {
     /// the first replace, the span is legitimately empty — callers can
     /// `as_slice()` / `iter()` without special-casing.
     pub fn empty<T>(&self) -> FSpan<'id, T> {
-        FSpan { offset: ARENA.offset.get(), len: 0, _marker: PhantomData }
-    }
-
-    /// Replace `span` with the output of `build`, reclaiming both
-    /// `span`'s old bytes and any scratch `build` allocated in between.
-    ///
-    /// Precondition (debug-asserted): `span` must be at the top of the
-    /// arena bump — i.e. no allocations happened between `span`'s
-    /// creation and this call. The typical pattern is a rotating
-    /// cross-iteration FSpan: each loop iteration consumes the previous
-    /// value, produces a new one, and any per-iteration scratch is
-    /// reclaimed by the replace's rewind.
-    ///
-    /// `build` receives a mutable frame (for scratch + the final
-    /// result) and a shared reference to the old span (readable for
-    /// the whole build — its bytes aren't touched until after `build`
-    /// returns). The result FSpan is memmoved down to `span`'s start,
-    /// overwriting the old contents; `T: Copy` ensures no destructor
-    /// conflicts.
-    pub fn replace<T, F>(&mut self, label: impl Into<Label>, span: FSpan<'id, T>, build: F) -> FSpan<'id, T>
-    where
-        T: Copy,
-        F: FnOnce(&mut Frame<'id>, &FSpan<'id, T>) -> FSpan<'id, T>,
-    {
-        let old_start = span.offset;
-        let old_end = span.offset + (span.len as u32) * size_of::<T>() as u32;
-        assert_eq!(
-            old_end, ARENA.offset.get(),
-            "replace: span must be at top of bump (end={}, arena={})",
-            old_end, ARENA.offset.get(),
-        );
-
-        // build reads `&span` (old bytes), allocates scratch + final
-        // result via `self`, and returns the new FSpan.
-        let new_span = build(self, &span);
-        let new_bytes = (new_span.len as u32) * size_of::<T>() as u32;
-
-        // memmove result down over old bytes. `new_span.offset >= old_start`
-        // by construction (new_span was allocated after old_start), so
-        // this is always a forward-direction copy — `copy_down` handles
-        // it without the 364 B of `compiler_builtins::memmove` that
-        // `ptr::copy`'s general-direction form would drag in.
-        if new_span.offset != old_start && new_bytes > 0 {
-            debug_assert!(new_span.offset > old_start);
-            // SAFETY: both source and destination are inside ARENA.buf.
-            // The source is valid for `new_bytes` (it's `new_span`'s
-            // live range); the destination is valid for `new_bytes`
-            // (inside the arena's backing storage; overlaps the old
-            // span region, which copy_down's forward iteration
-            // handles because dst < src means every byte is read
-            // before its slot is overwritten).
-            unsafe {
-                copy_down(
-                    ptr_at::<u8>(new_span.offset),
-                    ptr_at::<u8>(old_start),
-                    new_bytes as usize,
-                );
-            }
-        }
-        ARENA.offset.set(old_start + new_bytes);
-
-        // Trace view: "old span disappears, everything build allocated
-        // disappears, new span appears at old_start under `label`". The
-        // build closure's internal allocs are already in the log; the
-        // rewind here closes their rects, and the synthetic alloc
-        // represents the replacement result.
-        #[cfg(feature = "arena-trace")]
-        {
-            trace::rewind(old_start);
-            if new_bytes > 0 {
-                trace::alloc(label.into(), old_start + new_bytes);
-            }
-        }
-        #[cfg(not(feature = "arena-trace"))]
-        let _ = label.into();
-
-        // T: Copy, so neither span's Drop has real work; forget them to
-        // be explicit about ownership transferring to the returned
-        // FSpan.
-        let new_len = new_span.len;
-        core::mem::forget(span);
-        core::mem::forget(new_span);
-        FSpan { offset: old_start, len: new_len, _marker: PhantomData }
+        // Round up to T's alignment: slice::from_raw_parts requires an
+        // aligned pointer even for zero-length slices, and the bump
+        // offset can sit mid-odd-length-FStr. Never bumps the arena;
+        // stays ≤ SIZE because every power-of-two align divides SIZE.
+        let align = align_of::<T>() as u32;
+        let offset = (ARENA.offset.get() + align - 1) & !(align - 1);
+        FSpan { offset, len: 0, _marker: PhantomData }
     }
 
     /// Two-span sibling rotation: replace `span1` (lower) and `span2`
     /// (upper) atomically, reclaiming the build closure's scratch and any
     /// padding between the two new spans.
     ///
-    /// Same idea as [`replace`] but for two adjacent cross-iteration FSpans
+    /// Rotating pattern for two adjacent cross-iteration FSpans
     /// stacked at the top of the bump. The closure must build new1 below
     /// new2 (i.e., allocate new1's final bytes before new2's). Anything
     /// allocated between them — transient scratch, intermediate buffers —
@@ -787,6 +716,22 @@ impl<'id> Frame<'id> {
     /// On Linux the GPU side wires `T1 = ()` (a ZST), making every byte-
     /// count expression in this method fold to zero at compile time and
     /// the new1 memmove guard `new1_bytes > 0` short-circuit to false.
+    ///
+    /// The build closure's frame carries a fresh brand (see [`Frame::compact`]);
+    /// stashing one of its allocations past the rotation is a compile error:
+    ///
+    /// ```compile_fail
+    /// # use ltop::arena::{self, FSpan};
+    /// arena::scope(|f| {
+    ///     let s1: FSpan<u32> = f.collect("a", 0u32..2);
+    ///     let s2: FSpan<u32> = f.collect("b", 0u32..2);
+    ///     let mut stash = None;
+    ///     let _ = f.replace2("a", s1, "b", s2, |sub, _o1, _o2| {
+    ///         stash = Some(sub.collect("s", 0u32..8));
+    ///         (sub.empty(), sub.empty())
+    ///     });
+    /// });
+    /// ```
     pub fn replace2<T1, T2, F>(
         &mut self,
         label1: impl Into<Label>, span1: FSpan<'id, T1>,
@@ -795,8 +740,8 @@ impl<'id> Frame<'id> {
     ) -> (FSpan<'id, T1>, FSpan<'id, T2>)
     where
         T1: Copy, T2: Copy,
-        F: FnOnce(&mut Frame<'id>, &FSpan<'id, T1>, &FSpan<'id, T2>)
-            -> (FSpan<'id, T1>, FSpan<'id, T2>),
+        F: for<'sub> FnOnce(&mut Frame<'sub>, &FSpan<'id, T1>, &FSpan<'id, T2>)
+            -> (FSpan<'sub, T1>, FSpan<'sub, T2>),
     {
         let old1_start = span1.offset;
         let old1_end = span1.offset + (span1.len as u32) * size_of::<T1>() as u32;
@@ -807,13 +752,25 @@ impl<'id> Frame<'id> {
             "replace2: span1 must precede span2 (span1 ends at {}, span2 starts at {})",
             old1_end, old2_start,
         );
-        assert_eq!(
-            old2_end, ARENA.offset.get(),
+        // "At top of bump" with alignment slack: an empty span's offset
+        // is rounded up to align_of::<T2>() (see `Frame::empty`), so its
+        // end may sit up to align-1 bytes above the raw bump offset.
+        let arena_now = ARENA.offset.get();
+        assert!(
+            old2_end >= arena_now
+                && old2_end - arena_now < align_of::<T2>().max(1) as u32,
             "replace2: span2 must be at top of bump (end={}, arena={})",
-            old2_end, ARENA.offset.get(),
+            old2_end, arena_now,
         );
 
-        let (new1, new2) = build(self, &span1, &span2);
+        // Fresh brand for the build scope: anything the closure
+        // allocates is 'sub-branded and cannot be stashed into a
+        // caller-visible Option past the rewinds below (two live &mut
+        // over reused bytes, from safe code — see the compile_fail
+        // below). The returned spans are validated positionally and
+        // rebranded to 'id by construction at the end.
+        let mut sub = Frame { _brand: PhantomData };
+        let (new1, new2) = build(&mut sub, &span1, &span2);
         let new1_bytes = (new1.len as u32) * size_of::<T1>() as u32;
         let new2_bytes = (new2.len as u32) * size_of::<T2>() as u32;
 
@@ -883,11 +840,32 @@ impl<'id> Frame<'id> {
         )
     }
 
+    /// Build-then-slide: run `build` in a fresh sub-scope, then memmove
+    /// its returned span down to this frame's pre-build offset,
+    /// reclaiming everything else the closure allocated.
+    ///
+    /// The closure's frame carries a fresh brand, so smuggling an
+    /// allocation out through a captured `Option` — which would alias
+    /// later allocations after the slide — is a compile error:
+    ///
+    /// ```compile_fail
+    /// # use ltop::arena::{self, FSpan};
+    /// arena::scope(|f| {
+    ///     let mut stash = None;
+    ///     let _r: FSpan<u32> = f.compact("c", |sub| {
+    ///         stash = Some(sub.collect("s", 0u32..8));
+    ///         sub.empty()
+    ///     });
+    /// });
+    /// ```
     pub fn compact<T: Copy, F>(&mut self, label: impl Into<Label>, build: F) -> FSpan<'id, T>
-    where F: FnOnce(&mut Frame<'id>) -> FSpan<'id, T>
+    where F: for<'sub> FnOnce(&mut Frame<'sub>) -> FSpan<'sub, T>
     {
         let start = ARENA.offset.get();
-        let result = build(self);
+        // Fresh brand: see replace2 — closure allocations cannot escape
+        // the compact's rewind through captured outer state.
+        let mut sub = Frame { _brand: PhantomData };
+        let result = build(&mut sub);
         let align = align_of::<T>() as u32;
         let dst = (start + (align - 1)) & !(align - 1);
         let bytes = result.len * size_of::<T>() as u32;
@@ -1100,6 +1078,14 @@ impl<'id> Frame<'id> {
 /// nothing else can allocate from this frame until the builder is dropped.
 pub struct FBuilder<'a, 'id, T> {
     len: u32,
+    /// Test-build tripwire for the top-of-bump invariant: `push`/`pop`
+    /// assume this builder owns the top of the arena, which the
+    /// `&mut Frame` borrow enforces — except against a nested
+    /// `arena::scope` (the free function), which safe code could call
+    /// inside the build closure. Tracks the offset the next push must
+    /// land at; a mismatch means someone else bumped the arena.
+    #[cfg(test)]
+    next: u32,
     _marker: PhantomData<(&'a mut Frame<'id>, fn() -> T)>,
 }
 
@@ -1110,6 +1096,13 @@ impl<T> FBuilder<'_, '_, T> {
     /// Append `value`. Panics on arena overflow.
     pub fn push(&mut self, value: T) {
         let offset = bump(size_of::<T>(), align_of::<T>());
+        #[cfg(test)]
+        {
+            assert!(self.next == u32::MAX || offset == self.next,
+                "FBuilder: arena bumped between pushes (nested arena::scope \
+                 inside a span build?) — expected {}, got {}", self.next, offset);
+            self.next = offset + size_of::<T>() as u32;
+        }
         // No trace event here: `Frame::span` emits a single event for the
         // whole span after the build closure returns.
         // SAFETY: `bump` gave us a properly-sized+aligned uninitialised slot.
@@ -1141,6 +1134,8 @@ impl<T> FBuilder<'_, '_, T> {
     pub fn pop(&mut self) {
         if self.len == 0 { return; }
         ARENA.offset.set(ARENA.offset.get() - size_of::<T>() as u32);
+        #[cfg(test)]
+        if self.next != u32::MAX { self.next -= size_of::<T>() as u32; }
         self.len -= 1;
     }
 }
@@ -1381,6 +1376,12 @@ impl<'id, T> FVec<'id, T> {
     pub fn retain_in_place(&mut self, mut keep: impl FnMut(&mut T) -> bool) {
         let mut w = 0u32;
         let end = self.len;
+        // Unwind safety: while the loop runs, slots are a mix of live,
+        // moved-from, and dropped — len must not describe them. Zero it
+        // for the duration so a panicking `keep` (test builds unwind;
+        // production is panic=abort) leaks the elements instead of
+        // double-dropping discarded and moved-from slots via FVec::drop.
+        self.len = 0;
         for r in 0..end {
             // SAFETY: slot r is in bounds and still initialised — we only
             // copy INTO slots < r in prior iterations, never out of slot r.
@@ -3085,131 +3086,6 @@ mod tests {
 
     // ── replace ──
 
-    #[test]
-    fn replace_installs_result_at_old_offset() {
-        let _g = lock();
-        scope(|f| {
-            // Anchor some stuff below prev so we can verify offsets
-            // land where we expect.
-            let _anchor: FBox<u32> = f.alloc("anchor", 0xAA);
-            let before = offset();
-
-            let prev: FSpan<u32> = f.empty();
-            assert_eq!(prev.len(), 0);
-
-            let next = f.replace("test", prev, |frame, old| {
-                assert_eq!(old.len(), 0);
-                // Build a small output through a `span` closure.
-                frame.span("inner", |b| { b.push(10); b.push(20); b.push(30); })
-            });
-            assert_eq!(next.as_slice(), &[10, 20, 30]);
-            // Arena top is right past next's three u32s.
-            assert_eq!(offset(), before + 3 * 4);
-        });
-        assert_eq!(offset(), 0);
-    }
-
-    #[test]
-    fn replace_reclaims_build_scratch_and_old_bytes() {
-        let _g = lock();
-        scope(|f| {
-            let before = offset();
-            let prev: FSpan<u32> = f.collect("prev", [1u32, 2, 3, 4, 5].iter().copied());
-            let after_prev = offset();
-            assert_eq!(after_prev - before, 5 * 4);
-
-            let next = f.replace("test", prev, |frame, old| {
-                assert_eq!(old.as_slice(), &[1, 2, 3, 4, 5]);
-                // Gratuitous scratch allocation that must not leak.
-                let _scratch: FSpan<u32> = frame.zeros("scratch", 200);
-                frame.collect("new", old.as_slice().iter().map(|x| x * 10))
-            });
-            assert_eq!(next.as_slice(), &[10, 20, 30, 40, 50]);
-            // Arena top is exactly at the new span's end — old bytes
-            // overwritten in place, scratch reclaimed.
-            assert_eq!(offset(), before + 5 * 4);
-        });
-        assert_eq!(offset(), 0);
-    }
-
-    #[test]
-    fn replace_rotates_across_iterations() {
-        // Simulate the main-loop pattern: replace runs repeatedly, each
-        // iteration's prev is the previous iteration's next. Offsets
-        // must not drift; each iteration lands at the same place.
-        let _g = lock();
-        scope(|f| {
-            let anchor_end = {
-                let _a: FBox<u64> = f.alloc("anchor", 0);
-                offset()
-            };
-
-            let mut prev: FSpan<u32> = f.empty();
-            for i in 0..8u32 {
-                prev = f.replace("test", prev, |frame, old| {
-                    // Shift each old value by `i`, append one new element.
-                    frame.span("new", |b| {
-                        for &v in old.as_slice() { b.push(v + i); }
-                        b.push(100 + i);
-                    })
-                });
-                // After iteration i, prev has i+1 elements.
-                assert_eq!(prev.len(), (i + 1) as usize);
-                // And it sits immediately past the anchor, no drift.
-                assert_eq!(offset(), anchor_end + (i + 1) as usize * 4);
-            }
-            assert_eq!(prev.as_slice().len(), 8);
-        });
-        assert_eq!(offset(), 0);
-    }
-
-    #[test]
-    fn replace_empty_result_leaves_offset_at_old_start() {
-        let _g = lock();
-        scope(|f| {
-            let before = offset();
-            let prev: FSpan<u32> = f.collect("prev", [1u32, 2, 3].iter().copied());
-
-            let next = f.replace("test", prev, |frame, _old| frame.empty::<u32>());
-            assert_eq!(next.len(), 0);
-            assert_eq!(offset(), before);
-        });
-    }
-
-    #[test]
-    fn replace_with_inner_scope_rewinds_cleanly() {
-        // build can open sub-scopes; their bytes disappear with the
-        // scope close, and replace still sees the correct top-of-bump
-        // when the closure returns.
-        let _g = lock();
-        scope(|f| {
-            let before = offset();
-            let prev: FSpan<u32> = f.empty();
-            let next = f.replace("test", prev, |frame, _old| {
-                frame.scope(|sub| {
-                    let _big: FSpan<u64> = sub.zeros("big", 500);
-                    let _: FSpan<u32> = sub.collect("throwaway", 0u32..10);
-                });
-                frame.collect("result", [7u32, 11, 13].iter().copied())
-            });
-            assert_eq!(next.as_slice(), &[7, 11, 13]);
-            assert_eq!(offset(), before + 3 * 4);
-        });
-    }
-
-    #[test]
-    #[should_panic(expected = "replace: span must be at top of bump")]
-    fn replace_panics_if_span_not_at_top() {
-        let _g = lock();
-        scope(|f| {
-            let prev: FSpan<u32> = f.collect("prev", [1u32, 2, 3].iter().copied());
-            // Allocate above prev, breaking the top-of-bump invariant.
-            let _above: FBox<u32> = f.alloc("above", 0);
-            // Now replace's debug_assert should fire.
-            let _ = f.replace("test", prev, |frame, _old| frame.empty::<u32>());
-        });
-    }
-
     // ── replace2 ─────────────────────────────────────────────────────────
 
     #[test]
@@ -3348,6 +3224,37 @@ mod tests {
             let short = f.str("short", |b| b.extend_from_slice(b"abc")).into_small_lossy();
             assert_eq!(short.as_slice(), b"abc");
         });
+    }
+
+    /// A panicking `keep` closure must not double-drop: mid-retain the
+    /// slots are a mix of live, moved-from, and dropped, and FVec::drop
+    /// walking the original len would re-drop the latter two kinds.
+    /// The guard zeroes len for the loop's duration, so unwinding leaks
+    /// the elements instead (test builds only — production is
+    /// panic=abort). Exactly one drop happens here: element 1,
+    /// discarded before the panic at element 3.
+    #[test]
+    fn retain_in_place_no_double_drop_on_panicking_keep() {
+        use core::sync::atomic::{AtomicUsize, Ordering};
+        static DROPS: AtomicUsize = AtomicUsize::new(0);
+        struct D(u32);
+        impl Drop for D {
+            fn drop(&mut self) { DROPS.fetch_add(1, Ordering::Relaxed); }
+        }
+        let _g = lock();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            scope(|f| {
+                let mut v: FVec<D> = f.vec("t", 8);
+                for i in 0..6 { let _ = v.push(D(i)); }
+                v.retain_in_place(|d| {
+                    if d.0 == 3 { panic!("boom"); }
+                    d.0 % 2 == 0
+                });
+            });
+        }));
+        assert!(result.is_err());
+        assert_eq!(DROPS.load(Ordering::Relaxed), 1,
+                   "exactly the pre-panic discard drops; everything else leaks");
     }
 
     #[test]

@@ -154,9 +154,13 @@ impl Put for GpuInfo<'_> {
 /// ignores it (the driver maintains its own sliding window).
 ///
 /// On no-GPU hosts both returned FSpans are empty.
-pub fn collect<'a>(
+// `gpu_prev` carries its own brand ('p): it is last tick's span from the
+// caller's frame, read-only here, while the outputs are built from (and
+// branded by) this tick's `frame`. Tying them together would force
+// replace2's build closure to leak its sub-brand.
+pub fn collect<'p, 'a>(
     state: &State<'_>,
-    gpu_prev: &FSpan<'a, GpuPrevElem>,
+    gpu_prev: &FSpan<'p, GpuPrevElem>,
     frame: &mut Frame<'a>,
     dt_ns: u64,
 ) -> (GpuInfo<'a>, FSpan<'a, GpuPrevElem>) {

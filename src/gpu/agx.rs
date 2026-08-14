@@ -139,9 +139,9 @@ fn hw_memsize_mib() -> u64 {
 /// at gpu_prev's slot and the cpu prev (allocated even later, by main's
 /// loop) lands above. Anything between them — `entries`, transient
 /// scratch — gets squeezed out by replace2's two memmoves.
-pub fn populate<'id>(
+pub fn populate<'p, 'id>(
     state: &State<'_>,
-    prev: &FSpan<'id, (u32, u64)>,
+    prev: &FSpan<'p, (u32, u64)>,
     frame: &mut Frame<'id>,
     dt_ns: u64,
 ) -> (FSpan<'id, (u32, GpuProc)>, FSpan<'id, (u32, u64)>, (u32, u32, u64, u64)) {
