@@ -44,9 +44,18 @@ const ICANON: u32 = 0o0000002;
 #[cfg(target_os = "linux")]
 const ECHO:   u32 = 0o0000010;
 #[cfg(target_os = "linux")]
+const VINTR: usize = 0;
+#[cfg(target_os = "linux")]
+const VQUIT: usize = 1;
+#[cfg(target_os = "linux")]
 const VTIME: usize = 5;
 #[cfg(target_os = "linux")]
 const VMIN:  usize = 6;
+// _POSIX_VDISABLE: glibc defines '\0'. The tty driver compares c_cc
+// values against input bytes with no special disable casing, so 0
+// still matches a literal NUL (Ctrl-@) — an acceptable corner.
+#[cfg(target_os = "linux")]
+const VDISABLE: u8 = 0;
 #[cfg(target_os = "linux")]
 const TCGET: u64 = syscall::TCGETS;
 #[cfg(target_os = "linux")]
@@ -66,9 +75,16 @@ const ICANON: u64 = 0x100;
 #[cfg(target_os = "macos")]
 const ECHO:   u64 = 0x8;
 #[cfg(target_os = "macos")]
+const VINTR: usize = 8;
+#[cfg(target_os = "macos")]
+const VQUIT: usize = 9;
+#[cfg(target_os = "macos")]
 const VTIME: usize = 17;
 #[cfg(target_os = "macos")]
 const VMIN:  usize = 16;
+// _POSIX_VDISABLE per <unistd.h> (0xff, "same as sys/termios.h").
+#[cfg(target_os = "macos")]
+const VDISABLE: u8 = 0xff;
 #[cfg(target_os = "macos")]
 const TCGET: u64 = syscall::TIOCGETA;
 #[cfg(target_os = "macos")]
@@ -91,6 +107,17 @@ fn ioctl_termios(fd: i32, cmd: u64, t: &mut Termios) -> i64 {
 /// `tcgetattr` / `tcsetattr` are library wrappers around the platform
 /// ioctl (TCGETS/TCSETS on Linux, TIOCGETA/TIOCSETA on macOS); we issue
 /// the ioctl directly to avoid pulling in libc::tcgetattr.
+///
+/// ISIG stays ON but the INTR/QUIT control characters are disabled:
+/// with no signal handler anywhere (the mac no-libSystem invariant
+/// forbids one, and the default SIGINT disposition would kill the
+/// process without running `RawModeGuard::drop`), a fatal Ctrl-C
+/// would leave the user's terminal raw with a hidden cursor. Disabled
+/// signal chars arrive as plain input bytes (0x03/0x1c) and the main
+/// loop treats them as quit keys, so Ctrl-C exits through the guard.
+/// Ctrl-Z (VSUSP) keeps its kernel job-control meaning — shells
+/// restore the tty state they saved on `fg`, and the seccomp filter
+/// allowlists the restart_syscall re-entry the resume produces.
 pub fn enter_raw_mode() -> RawModeGuard {
     // fd 0 = stdin. Avoids io::stdin() and its OnceLock-backed global.
     const FD: i32 = 0;
@@ -100,6 +127,8 @@ pub fn enter_raw_mode() -> RawModeGuard {
     raw.c_lflag &= !(ICANON | ECHO);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 0;
+    raw.c_cc[VINTR] = VDISABLE;
+    raw.c_cc[VQUIT] = VDISABLE;
     ioctl_termios(FD, TCSET, &mut raw);
     syscall::write_all(1, b"\x1b[?25l");
     RawModeGuard { fd: FD, orig }

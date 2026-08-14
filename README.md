@@ -98,7 +98,7 @@ ltop          # interactive
 ltop --once   # one frame and exit
 ```
 
-Press `q` to quit.
+Press `q` (or Ctrl-C) to quit.
 
 To build-and-run straight from the repo without installing, use the
 `cargo ltop` alias (same minimal pipeline):

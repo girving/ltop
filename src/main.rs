@@ -746,7 +746,10 @@ pub(crate) fn run(flags: u64) {
             // a second instead of two. Steady-state is 2 s, restoring the
             // 50/tick `next_steps` that the CPU quantization was tuned for.
             for _ in 0..next_steps {
-                if tty::read_one_stdin() == Some(b'q') { break 'main; }
+                // 0x03/0x1c are Ctrl-C/Ctrl-\: raw mode disables their
+                // signal-char role (tty::enter_raw_mode), so they arrive
+                // as bytes and quit cleanly through RawModeGuard.
+                if matches!(tty::read_one_stdin(), Some(b'q' | 0x03 | 0x1c)) { break 'main; }
                 platform::sleep(Duration::from_millis(50));
             }
             next_steps = 40;
