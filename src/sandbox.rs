@@ -520,27 +520,17 @@ pub fn install() {
 #[inline(never)]
 #[cold]
 fn fail(s: u8, e: i64) -> ! {
-    let mut buf = [0u8; 64];
-    let prefix = b"ltop: sandbox install failed (";
-    buf[..prefix.len()].copy_from_slice(prefix);
-    let mut n = prefix.len();
-    buf[n] = s;
-    n += 1;
-    buf[n..n + 5].copy_from_slice(b" err=");
-    n += 5;
-    let (neg, mut v) = if e < 0 { (true, e.unsigned_abs()) } else { (false, e as u64) };
-    if neg { buf[n] = b'-'; n += 1; }
-    let mut tmp = [0u8; 20];
-    let mut tn = tmp.len();
-    if v == 0 { tn -= 1; tmp[tn] = b'0'; }
-    while v > 0 { tn -= 1; tmp[tn] = b'0' + (v % 10) as u8; v /= 10; }
-    let dn = tmp.len() - tn;
-    buf[n..n + dn].copy_from_slice(&tmp[tn..]);
-    n += dn;
-    buf[n] = b')';
-    buf[n + 1] = b'\n';
-    n += 2;
-    let _ = syscall::write_once(2, &buf[..n]);
+    // Fixed-width message: step char + three zero-padded errno digits
+    // ("err=038" = ENOSYS: kernel too old; "err=095" = EOPNOTSUPP:
+    // CONFIG_SECURITY_LANDLOCK=n). errno magnitudes fit 3 digits, and
+    // the fixed template is ~80 B smaller than a general u64 formatter.
+    let mut buf = *b"ltop: sandbox install failed (? err=000)\n";
+    buf[30] = s;
+    let v = (e.unsigned_abs() as u32) % 1000;
+    buf[36] = b'0' + (v / 100) as u8;
+    buf[37] = b'0' + (v / 10 % 10) as u8;
+    buf[38] = b'0' + (v % 10) as u8;
+    let _ = syscall::write_once(2, &buf);
     syscall::exit_group(2);
 }
 

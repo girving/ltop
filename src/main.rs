@@ -420,16 +420,17 @@ fn render_tree<W: TinyWriter + ?Sized>(
 /// annotation. `color` is the per-channel max of the elided children's
 /// `row_color`s, so the elision's hue tracks peak load under the root.
 fn emit_elision_row<W: TinyWriter + ?Sized>(out: &mut W, more: usize, has_gpu: bool, color: (u8, u8, u8)) {
-    // depth=1 (direct child of root), mask bit 0 set → renders as "└─".
-    let indent = Indent { depth: 1, mask: 1 };
     let (r, g, b) = color;
     // Column widths (all blank): pid(7) + sp + cpu(6) + sp + mem(6) +
     //   [GPU_DATA_COLS * 7 if has_gpu] + sp + age(6) + 2 sp.
     // Linux: 30 / 44. macOS: 30 / 37. `repeat` instead of literal space
     // runs — the three static strings cost ~110 B of rodata.
+    // The depth-1 last-sibling prefix is constant ("└─") — going
+    // through Indent's Put impl would keep a second call site alive
+    // for its ~190 B monomorph.
     let blanks = 30 + if has_gpu { GPU_DATA_COLS * 7 } else { 0 };
     twrite!(out, FgOpen(r, g, b), bytes::repeat(' ', blanks),
-            indent, u32d(more as u32), " more...");
+            "└─", u32d(more as u32), " more...");
     out.put_bytes(FG_CLOSE_EOL);
 }
 
