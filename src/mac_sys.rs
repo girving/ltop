@@ -70,6 +70,19 @@ fn cached_reply_port() -> u32 {
     new
 }
 
+/// `cargo test` runs the parity tests on parallel threads, but every
+/// MIG sender shares the one cached reply port and no reply parser
+/// validates msgh_id — two concurrent calls can dequeue each other's
+/// replies (observed as rare flaky failures). Production is
+/// single-threaded with one outstanding RPC, so serialisation is
+/// test-only: each sender holds this lock across its send/receive
+/// pair. Same pattern as `arena::test_lock`.
+#[cfg(test)]
+fn mig_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// `mach_msg2_trap` with all 8 packed args. Each 64-bit arg carries
 /// two 32-bit message-header fields (low and high halves).
 #[inline]
@@ -378,6 +391,8 @@ pub fn vm_statistics64() -> Option<[u32; 38]> {
     const RCV_MAX:  u32 = 40 + 38 * 4 + 32;    // + data + trailer = 224
 
     let host = unsafe { mach_host_self() };
+    #[cfg(test)]
+    let _mig_serial = mig_test_lock();
     let reply = cached_reply_port();
     if host == 0 || reply == 0 { return None; }
 
@@ -502,6 +517,8 @@ unsafe fn host_get_io_master_uncached() -> u32 {
     const RCV_MAX:  u32 = 24 + 4 + 12 + 32;     // 72
 
     let host  = unsafe { mach_host_self() };
+    #[cfg(test)]
+    let _mig_serial = mig_test_lock();
     let reply = cached_reply_port();
     if host == 0 || reply == 0 { return 0; }
 
@@ -602,6 +619,8 @@ unsafe fn mach_port_deallocate_raw(port: u32) -> i32 {
     // fix is `task_self_trap`, cached.
     let task_port_name: u32 = cached_task_self();
 
+    #[cfg(test)]
+    let _mig_serial = mig_test_lock();
     let reply = cached_reply_port();
     if reply == 0 { return -1; }
 
@@ -644,7 +663,7 @@ unsafe fn mach_port_deallocate_raw(port: u32) -> i32 {
 
 // ── IOKit MIG calls (Phase 2 of mac-iokit-free.md) ──────────────────────────
 //
-// Four IOKit MIG routines, all sent via mach_msg2 with the same packed-arg
+// Five IOKit MIG routines, all sent via mach_msg2 with the same packed-arg
 // pattern as host_statistics64 / host_get_io_master. Routine IDs were
 // confirmed by disassembling libIOKit's wrappers in the dyld shared cache
 // (the Xcode SDK's iokitmig.h is a one-line stub these days, so the source
@@ -653,6 +672,8 @@ unsafe fn mach_port_deallocate_raw(port: u32) -> i32 {
 //   io_iterator_next                       = 2802
 //   io_registry_entry_get_child_iterator   = 2813
 //   io_registry_entry_get_properties_bin   = 2878  (OOL reply)
+//   io_registry_entry_get_property_bin     = 2879  (single property, OOL reply;
+//                                                   layout notes in mac-property-bin.md)
 //   io_service_get_matching_services_bin   = 2881  (binary serialised matching dict)
 //
 // The `_bin` variants take the matching dict / receive properties as raw
@@ -737,7 +758,20 @@ pub fn io_registry_entry_get_child_iterator(entry: u32, plane: &[u8]) -> u32 {
 #[allow(dead_code)]
 pub fn io_registry_entry_get_properties_bin(entry: u32) -> Option<OolBuffer> {
     if entry == 0 { return None; }
-    unsafe { iokit_get_properties(entry) }
+    unsafe { iokit_get_props_inner(2878, entry, None) }
+}
+
+/// `io_registry_entry_get_property_bin(entry, "", name, 0)` — MIG
+/// routine 2879. The kernel serialises the single named property (via
+/// `IOCopyPropertyCompatible` when the plane is empty) as the root of
+/// a kOSSerializeBinary blob and returns it out-of-line — same reply
+/// shape as `get_properties_bin`, but ~25× smaller for the AGX root
+/// whose full table is dominated by IOReportLegend. `name` is a
+/// NUL-terminated byte string ≤ 128 B (the kernel's `io_name_t`
+/// ceiling). Layout research in mac-property-bin.md.
+pub fn io_registry_entry_get_property_bin(entry: u32, name: &[u8]) -> Option<OolBuffer> {
+    if entry == 0 || name.is_empty() || name.len() > 128 { return None; }
+    unsafe { iokit_get_props_inner(2879, entry, Some(name)) }
 }
 
 /// RAII wrapper around an out-of-line memory descriptor returned by an
@@ -1043,6 +1077,8 @@ unsafe fn iokit_iter_call(msgh_id: u32, target: u32, data: Option<&[u8]>) -> u32
     const BUF_SIZE: usize = 4096 + 64;
     let mut buf = [0u8; BUF_SIZE];
 
+    #[cfg(test)]
+    let _mig_serial = mig_test_lock();
     let reply = cached_reply_port();
     if reply == 0 { return 0; }
 
@@ -1124,6 +1160,8 @@ unsafe fn iokit_get_child_iter(entry: u32, plane: &[u8]) -> u32 {
     // Max request: 24 + 8 + 4 + 4 + 128 = 168 bytes. Reply: 72 max.
     let mut buf = [0u8; 256];
 
+    #[cfg(test)]
+    let _mig_serial = mig_test_lock();
     let reply = cached_reply_port();
     if reply == 0 { return 0; }
 
@@ -1165,10 +1203,90 @@ unsafe fn iokit_get_child_iter(entry: u32, plane: &[u8]) -> u32 {
     u32::from_le_bytes(buf[28..32].try_into().unwrap())
 }
 
-/// `io_registry_entry_get_properties_bin` — request is just the header
-/// (24 bytes); reply carries an OOL descriptor whose `address` field
-/// points at a kernel-allocated buffer mapped into our address space,
-/// holding the entry's properties as kOSSerializeBinary.
+/// Shared sender for the two property-fetch routines, whose replies
+/// are byte-identical (a single OOL descriptor holding a
+/// kOSSerializeBinary blob — see `parse_ool_reply`):
+///
+///   2878 `get_properties_bin` (`name` = None) — request is just the
+///        header (24 bytes).
+///   2879 `get_property_bin` (`name` = Some) — header + NDR + two MIG
+///        counted strings + options. We always send plane = "" (⇒
+///        direct property lookup, no plane iteration) and options = 0,
+///        matching libIOKit's IORegistryEntryCreateCFProperty. Wire
+///        layout pinned from the local libIOKit MIG stub — see
+///        mac-property-bin.md:
+///
+///   header(24) + NDR(8)
+///   + [offset 0 (4) | planeCnt (4) | "" padded (4)]     — plane
+///   + [offset 0 (4) | nameCnt (4)  | name padded to 4]  — property name
+///   + options (4)
+#[inline(never)]
+unsafe fn iokit_get_props_inner(id: u32, entry: u32, name: Option<&[u8]>) -> Option<OolBuffer> {
+    const MACH_MSG_TYPE_COPY_SEND:       u32 = 19;
+    const MACH_MSG_TYPE_MAKE_SEND_ONCE:  u32 = 21;
+    const MSGH_BITS: u32 =
+        MACH_MSG_TYPE_COPY_SEND | (MACH_MSG_TYPE_MAKE_SEND_ONCE << 8);
+
+    const MACH64_MACH_MSG2:         u64 = 0x8000_0000_0000_0000;
+    const MACH64_SEND_KOBJECT_CALL: u64 = 0x0000_0002_0000_0000;
+    const MACH64_SEND_MSG:          u64 = 0x1;
+    const MACH64_RCV_MSG:           u64 = 0x2;
+
+    // Max request: 52 fixed + 4 (empty plane) + 128 (name) = 184. The
+    // reply (header + body_count + OOL_desc + NDR + size + trailer =
+    // 88, capped at 128 in the receive) reuses the same buffer.
+    let mut buf = [0u8; 256];
+
+    #[cfg(test)]
+    let _mig_serial = mig_test_lock();
+    let reply = cached_reply_port();
+    if reply == 0 { return None; }
+
+    let req_size: u32 = match name {
+        None => 24,
+        Some(name) => {
+            // Public wrapper enforces this; the inner fn shouldn't
+            // trust callers.
+            if name.is_empty() || name.len() > 128 { return None; }
+            // Plane "" at 32..44: offset 0, count 1 (just the NUL),
+            // 4 zero bytes. NDR at 24..32 stays zeroed, as elsewhere.
+            buf[36..40].copy_from_slice(&1u32.to_le_bytes());
+            // Property name at 44..: offset 0, count (incl NUL),
+            // padded bytes, then options = 0 (already zeroed).
+            let pad = (name.len() + 3) & !3;
+            buf[48..52].copy_from_slice(&(name.len() as u32).to_le_bytes());
+            buf[52..52 + name.len()].copy_from_slice(name);
+            (52 + pad + 4) as u32
+        }
+    };
+
+    buf[0..4].copy_from_slice(&MSGH_BITS.to_le_bytes());
+    buf[4..8].copy_from_slice(&req_size.to_le_bytes());
+    buf[8..12].copy_from_slice(&entry.to_le_bytes());
+    buf[12..16].copy_from_slice(&reply.to_le_bytes());
+    buf[20..24].copy_from_slice(&id.to_le_bytes());
+
+    let options = MACH64_MACH_MSG2 | MACH64_SEND_KOBJECT_CALL
+                | MACH64_SEND_MSG  | MACH64_RCV_MSG;
+    let kr = unsafe {
+        mach_msg2(
+            buf.as_mut_ptr(),
+            options,
+            (MSGH_BITS as u64) | ((req_size as u64) << 32),
+            (entry as u64) | ((reply as u64) << 32),
+            (id as u64) << 32,
+            (reply as u64) << 32,
+            128,
+            0,
+        )
+    };
+    if kr != 0 { return None; }
+    parse_ool_reply(buf[..128].try_into().unwrap())
+}
+
+/// Shared tail for MIG replies whose payload is a single OOL memory
+/// descriptor (`io_buf_ptr_t, physicalcopy`): `get_properties_bin`
+/// (2878) and `get_property_bin` (2879) have byte-identical replies.
 ///
 /// Reply layout (after header at offset 0):
 ///   offset 24: descriptor count (4 bytes, == 1)
@@ -1177,52 +1295,8 @@ unsafe fn iokit_get_child_iter(entry: u32, plane: &[u8]) -> u32 {
 ///   offset 44: NDR (8 bytes)
 ///   offset 52: redundant size field (4 bytes)
 ///   offset 56: trailer (32 bytes the kernel writes)
-#[inline(never)]
-unsafe fn iokit_get_properties(entry: u32) -> Option<OolBuffer> {
-    const MACH_MSG_TYPE_COPY_SEND:       u32 = 19;
-    const MACH_MSG_TYPE_MAKE_SEND_ONCE:  u32 = 21;
-    const MSGH_BITS: u32 =
-        MACH_MSG_TYPE_COPY_SEND | (MACH_MSG_TYPE_MAKE_SEND_ONCE << 8);
+fn parse_ool_reply(buf: &[u8; 128]) -> Option<OolBuffer> {
     const MACH_MSGH_BITS_COMPLEX: u32 = 0x8000_0000;
-
-    const MACH64_MACH_MSG2:         u64 = 0x8000_0000_0000_0000;
-    const MACH64_SEND_KOBJECT_CALL: u64 = 0x0000_0002_0000_0000;
-    const MACH64_SEND_MSG:          u64 = 0x1;
-    const MACH64_RCV_MSG:           u64 = 0x2;
-
-    const ID: u32 = 2878;
-    const REQ_SIZE: u32 = 24;
-    // Reply size: header(24) + body_count(4) + OOL_desc(16) + NDR(8) +
-    // size_field(4) + trailer(32) = 88. Round up for slack.
-    const RCV_SIZE: u32 = 128;
-
-    let mut buf = [0u8; 128];
-
-    let reply = cached_reply_port();
-    if reply == 0 { return None; }
-
-    buf[0..4].copy_from_slice(&MSGH_BITS.to_le_bytes());
-    buf[4..8].copy_from_slice(&REQ_SIZE.to_le_bytes());
-    buf[8..12].copy_from_slice(&entry.to_le_bytes());
-    buf[12..16].copy_from_slice(&reply.to_le_bytes());
-    buf[20..24].copy_from_slice(&ID.to_le_bytes());
-
-    let options = MACH64_MACH_MSG2 | MACH64_SEND_KOBJECT_CALL
-                | MACH64_SEND_MSG  | MACH64_RCV_MSG;
-    let kr = unsafe {
-        mach_msg2(
-            buf.as_mut_ptr(),
-            options,
-            (MSGH_BITS as u64) | ((REQ_SIZE as u64) << 32),
-            (entry as u64) | ((reply as u64) << 32),
-            (ID as u64) << 32,
-            (reply as u64) << 32,
-            RCV_SIZE as u64,
-            0,
-        )
-    };
-    if kr != 0 { return None; }
-
     let reply_bits = u32::from_le_bytes(buf[0..4].try_into().unwrap());
     if reply_bits & MACH_MSGH_BITS_COMPLEX == 0 { return None; }
     let descriptor_count = u32::from_le_bytes(buf[24..28].try_into().unwrap());
@@ -1771,6 +1845,53 @@ mod tests {
                    "top-level tag isn't a Dictionary: 0x{top_tag:08x}");
         unsafe { IOObjectRelease(entry); }
         // OolBuffer Drop releases the kernel-allocated bytes.
+    }
+
+    /// Cross-check MIG 2879 against 2878 on a service every Mac
+    /// (including virtualised CI) has: IOPlatformExpertDevice's
+    /// IOPlatformUUID. The single-property blob's root String must
+    /// byte-match the same key inside the full properties dict — pins
+    /// routine ID 2879, the two-counted-string request layout, and the
+    /// shared OOL reply parse against the live kernel.
+    #[test]
+    fn io_registry_entry_get_property_bin_matches_properties_bin() {
+        let dict = unsafe { IOServiceMatching(b"IOPlatformExpertDevice\0".as_ptr() as *const _) };
+        assert!(!dict.is_null());
+        let mut iter: u32 = 0;
+        let kr = unsafe { IOServiceGetMatchingServices(0, dict, &mut iter) };
+        assert_eq!(kr, 0);
+        let entry = unsafe { IOIteratorNext(iter) };
+        unsafe { IOObjectRelease(iter); }
+        assert_ne!(entry, 0, "IOPlatformExpertDevice should exist on every Mac");
+
+        // Reference: the full table via 2878, IOPlatformUUID extracted.
+        let all = io_registry_entry_get_properties_bin(entry)
+            .expect("get_properties_bin returned None");
+        let mut ckpts_all = vec![0u32; 512];
+        let bin_all = crate::osbinary::OsBinary::parse(all.as_bytes(), &mut ckpts_all)
+            .expect("full-table blob should parse");
+        let root_all = bin_all.root().unwrap();
+        let want = bin_all.find_dict(root_all, b"IOPlatformUUID")
+            .and_then(|v| bin_all.as_string(v))
+            .expect("IOPlatformUUID missing from the full property table")
+            .to_vec();
+
+        // Single property via 2879 — the String is the blob's root.
+        let one = io_registry_entry_get_property_bin(entry, b"IOPlatformUUID\0")
+            .expect("get_property_bin returned None — routine-ID or request-\
+                     layout mismatch against this macOS version");
+        let mut ckpts_one = vec![0u32; 16];
+        let bin_one = crate::osbinary::OsBinary::parse(one.as_bytes(), &mut ckpts_one)
+            .expect("single-property blob should parse");
+        let got = bin_one.root()
+            .and_then(|r| bin_one.as_string(r))
+            .expect("2879 blob root should be a String");
+        assert_eq!(got, &want[..], "IOPlatformUUID: 2879 vs 2878 mismatch");
+
+        // A missing property must come back None (MIG error reply has
+        // no OOL descriptor), not garbage.
+        assert!(io_registry_entry_get_property_bin(entry, b"NoSuchLtopProperty\0").is_none());
+        unsafe { IOObjectRelease(entry); }
     }
 
     /// Our `io_registry_entry_get_child_iterator` on an AGXAccelerator

@@ -180,15 +180,19 @@ pub fn populate<'id>(
             let agx = crate::mac_sys::io_iterator_next(iter);
             if agx == 0 { break; }
 
-            // Read AGXAccelerator's own properties → "PerformanceStatistics
-            // ['In use system memory']". The OOL buffer drops at the end
-            // of this if-let, calling vm_deallocate to release the
-            // kernel pages.
-            if let Some(buf) = crate::mac_sys::io_registry_entry_get_properties_bin(agx) {
+            // Read AGXAccelerator's "PerformanceStatistics['In use system
+            // memory']". Fetched as a single property (MIG 2879) so the
+            // kernel serialises the ~2 KB dict instead of the ~100 KB
+            // full property table (IOReportLegend dominates it). The OOL
+            // buffer drops at the end of this if-let, calling
+            // vm_deallocate to release the kernel pages.
+            if let Some(buf) = crate::mac_sys::io_registry_entry_get_property_bin(
+                agx, b"PerformanceStatistics\0")
+            {
                 if let Some(bin) = crate::osbinary::OsBinary::parse(
                     buf.as_bytes(), &mut osbin_ckpts[..])
                 {
-                    if let Some(used) = read_agx_used_mib_blob(&bin) {
+                    if let Some(used) = read_perf_stats_blob(&bin) {
                         total_used_mib += used;
                     }
                 }
@@ -284,21 +288,20 @@ fn compute_pct(prev_ns: u64, now_ns: u64, dt_ns: u64) -> u32 {
     (delta_ns.saturating_mul(100) / dt_ns).min(100) as u32
 }
 
-/// libIOKit-free counterparts of the read_ helpers below: operate on a
-/// pre-parsed OSSerializeBinary blob (kernel-emitted via
-/// `io_registry_entry_get_properties_bin`) instead of going through
-/// CFDictionary / CFNumber / CFArray. Logically identical to the
-/// libIOKit path; structurally we walk the binary tree directly via
-/// `osbinary::OsBinary`.
+/// libIOKit-free extractors: operate on a pre-parsed OSSerializeBinary
+/// blob (kernel-emitted via `io_registry_entry_get_property_bin` for
+/// the accelerator root, `io_registry_entry_get_properties_bin` for
+/// userclients) instead of going through CFDictionary / CFNumber /
+/// CFArray. Logically identical to the libIOKit path; structurally we
+/// walk the binary tree directly via `osbinary::OsBinary`.
 
-/// Same semantics as `read_agx_used_mib`, but takes a pre-parsed
-/// property blob instead of an IOKit registry entry. Looks up
-/// `PerformanceStatistics["In use system memory"]`, a CFNumber giving
-/// bytes, and returns it rounded down to MiB.
-pub(crate) fn read_agx_used_mib_blob(bin: &crate::osbinary::OsBinary<'_>) -> Option<u64> {
+/// Takes a pre-parsed `PerformanceStatistics` blob (fetched via
+/// `io_registry_entry_get_property_bin`, so the dict itself is the
+/// blob's root object), looks up `"In use system memory"` — a Number
+/// giving bytes — and returns it rounded down to MiB.
+pub(crate) fn read_perf_stats_blob(bin: &crate::osbinary::OsBinary<'_>) -> Option<u64> {
     let root = bin.root()?;
-    let perf = bin.find_dict(root, b"PerformanceStatistics")?;
-    let used = bin.find_dict(perf, b"In use system memory")?;
+    let used = bin.find_dict(root, b"In use system memory")?;
     let bytes = bin.as_number(used)?;
     Some(bytes >> 20)
 }
@@ -381,25 +384,24 @@ mod tests {
         out.extend_from_slice(&((value >> 32) as u32).to_le_bytes());
     }
 
-    /// Hand-build an AGXAccelerator-shaped dict and verify that
-    /// `read_agx_used_mib_blob` extracts the expected MiB value.
-    /// Tests the full chain: nested-dict lookup, Number decode, and
-    /// the bytes-to-MiB shift.
+    /// Hand-build a `PerformanceStatistics`-shaped blob (the dict is
+    /// the root, as `io_registry_entry_get_property_bin` returns it)
+    /// and verify that `read_perf_stats_blob` extracts the expected
+    /// MiB value: dict lookup, Number decode, and the bytes-to-MiB
+    /// shift.
     #[test]
-    fn read_agx_used_mib_blob_synthetic() {
-        // { "PerformanceStatistics" : { "In use system memory" : 12451840u64 } }
+    fn read_perf_stats_blob_synthetic() {
+        // { "In use system memory" : 12451840u64 }
         // 12451840 bytes >> 20 = 11 MiB.
         let mut b = Vec::new();
         b.extend_from_slice(&MAGIC);
         emit_tag(&mut b, TY_DICT, 1, false);          // root
-        emit_symbol(&mut b, b"PerformanceStatistics", false);
-        emit_tag(&mut b, TY_DICT, 1, true);           // EOC on the value
         emit_symbol(&mut b, b"In use system memory", false);
         emit_number(&mut b, 12_451_840, true);
 
         let mut ckpts = vec![0u32; 32];
         let bin = crate::osbinary::OsBinary::parse(&b, &mut ckpts).expect("parse");
-        assert_eq!(read_agx_used_mib_blob(&bin), Some(11));
+        assert_eq!(read_perf_stats_blob(&bin), Some(11));
     }
 
     /// Hand-build an AGXDeviceUserClient-shaped dict and verify that
