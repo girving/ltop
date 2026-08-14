@@ -375,7 +375,8 @@ fn try_init<'a>(frame: &mut Frame<'a>) -> Option<State<'a>> {
     check_version(frame, fd)?;
     // SYS_PARAMS is a one-shot global init that EBUSYs if the first nvidia
     // process already set it — skipped with no observed ill effect.
-    let n_gpus = count_attached_gpus(frame, fd)?;
+    let mut minors = [0u32; NV_MAX_DEVICES];
+    let n_gpus = attached_gpu_minors(frame, fd, &mut minors)?;
     let mut root = Nv0000AllocParameters {
         process_id: crate::platform::getpid(),
         ..Default::default()
@@ -390,11 +391,21 @@ fn try_init<'a>(frame: &mut Frame<'a>) -> Option<State<'a>> {
     // "/dev/nvidia%d\0" — u32 maxes out at 10 digits, plus prefix + NUL.
     let mut path = [0u8; 32];
     for i in 0..n_gpus as u32 {
+        // Device node = the driver-reported minor for this entry, NOT
+        // the loop index: NVreg_ExcludedGpus (VFIO passthrough,
+        // display-only reservations) leaves holes in the minor space
+        // while the CARD_INFO reply is compacted without renumbering
+        // (kernel nvidia_read_card_info skips excluded GPUs), so
+        // /dev/nvidia{i} could name an excluded GPU whose open() EPERMs
+        // and would abort init with usable GPUs present. Handles and
+        // NV0080 deviceInstance stay loop-indexed — RM attaches only
+        // non-excluded GPUs, so instances are dense 0..n.
+        //
         // Reusable NUL-terminated path buffer. ASCII-only, so treat the
         // filled prefix as a &CStr-equivalent via raw pointer.
         let n = {
             let mut w = CharBuf::new(&mut path);
-            crate::twrite!(&mut w, "/dev/nvidia", crate::bytes::u32d(i as u32), "\0");
+            crate::twrite!(&mut w, "/dev/nvidia", crate::bytes::u32d(minors[i as usize]), "\0");
             w.len
         };
         let fd_path = unsafe { core::ffi::CStr::from_ptr(path[..n].as_ptr() as *const _) };
@@ -429,7 +440,13 @@ impl crate::twrite::TinyWriter for CharBuf<'_> {
     }
 }
 
-fn count_attached_gpus(frame: &mut Frame<'_>, fd: i32) -> Option<usize> {
+/// CARD_INFO: fill `minors` with each valid entry's device minor and
+/// return how many there are. The reply array is compacted (invalid /
+/// excluded entries skipped) but the surviving entries keep their real
+/// minor numbers.
+fn attached_gpu_minors(
+    frame: &mut Frame<'_>, fd: i32, minors: &mut [u32; NV_MAX_DEVICES],
+) -> Option<usize> {
     // 32 × 72 B = 2304 B — over the >1 KB → arena rule, so allocate it in
     // a sub-scope and let the arena reclaim it when this call returns.
     // `alloc_zeroed` relies on the `Zeroable` impl asserting that all-
@@ -449,7 +466,14 @@ fn count_attached_gpus(frame: &mut Frame<'_>, fd: i32) -> Option<usize> {
             dbg_eprintln!("CARD_INFO ioctl failed");
             return None;
         }
-        Some(cards.iter().filter(|c| c.valid != 0).count())
+        let mut n = 0usize;
+        for c in cards.iter() {
+            if c.valid != 0 {
+                minors[n] = c.minor_number;
+                n += 1;
+            }
+        }
+        Some(n)
     })
 }
 
