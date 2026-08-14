@@ -602,9 +602,11 @@ unsafe fn mach_port_deallocate_raw(port: u32) -> i32 {
         msgh_voucher_port: u32,
         msgh_id:           u32,
         ndr:               [u8; 8],
-        port_name:         u32,        // request only — overlapped by retcode in reply
-        retcode:           u32,        // reply: kern_return_t at offset 32 too on simple reply
-        trailer:           [u8; 32],
+        /// Request: the port name to deallocate. Reply: the MIG
+        /// RetCode — mig_reply_error_t is header(24) + NDR(8) +
+        /// kern_return_t, so the code lands at offset 32, right here.
+        port_name_or_retcode: u32,
+        trailer:           [u8; 36],
     }
     const REQ_SIZE: u32 = 36;
     const RCV_MAX:  u32 = 36 + 32;       // simple reply + trailer
@@ -632,9 +634,8 @@ unsafe fn mach_port_deallocate_raw(port: u32) -> i32 {
         msgh_voucher_port: 0,
         msgh_id:           MACH_PORT_DEALLOCATE_ID,
         ndr:               NDR_LE,
-        port_name:         port,
-        retcode:           0,
-        trailer:           [0; 32],
+        port_name_or_retcode: port,
+        trailer:           [0; 36],
     };
 
     let options = MACH64_MACH_MSG2 | MACH64_SEND_KOBJECT_CALL
@@ -658,7 +659,7 @@ unsafe fn mach_port_deallocate_raw(port: u32) -> i32 {
         )
     };
     if kr != 0 { return kr; }
-    msg.retcode as i32
+    msg.port_name_or_retcode as i32
 }
 
 // ── IOKit MIG calls (Phase 2 of mac-iokit-free.md) ──────────────────────────
@@ -1725,6 +1726,21 @@ mod tests {
         // kern_return_t = 0 on success. KERN_INVALID_RIGHT (17) would
         // mean we passed a bad port name. Anything else is a bug.
         assert_eq!(kr, 0, "mach_port_deallocate kr = {kr}");
+    }
+
+    /// The failure side of the tripwire: this test's whole point is
+    /// catching leaks via a nonzero RetCode, which only works if we
+    /// read the RetCode from the right reply offset (it once read the
+    /// trailer and reported 0 unconditionally). Deallocating a
+    /// receive-right name is a deterministic, harmless MIG-level error
+    /// — the kernel answers KERN_INVALID_RIGHT (17) and the receive
+    /// right survives.
+    #[test]
+    fn mach_port_deallocate_reports_real_errors() {
+        let recv = super::cached_reply_port();
+        assert_ne!(recv, 0);
+        let kr = mach_port_deallocate(recv);
+        assert_eq!(kr, 17, "expected KERN_INVALID_RIGHT, got {kr}");
     }
 
     // ── Phase 2: IOKit MIG parity tests ─────────────────────────────
