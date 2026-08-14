@@ -51,7 +51,7 @@ use crate::arena::{FBuilder, FNest, FReserve, FSpan, FSmallStr, FVec, Frame};
 use crate::arena::FBox;
 #[cfg(any(target_os = "linux", not(test)))]
 use crate::arena::FStr;
-use crate::bytes::{f1_wide, f2, ieq, pad_left, pad_right, pad_zero, u32d};
+use crate::bytes::{f1_wide, ieq, pad_left, pad_right, pad_zero, u32d};
 // `repeat`, `Instant` are only used by `fn run` (gated
 // `#[cfg(not(test))]`); gating the imports too avoids unused-import
 // warnings in the test build.
@@ -127,17 +127,24 @@ struct Indent {
 
 impl Indent {
     fn is_root(self) -> bool { self.depth == 0 }
-    fn width(self) -> usize { self.depth as usize * 2 }
+    /// Rendered depth is clamped to the mask's 32 levels: deeper
+    /// chains (nested containers/CI wrappers) draw a depth-32 prefix
+    /// instead of wrapping the mask shift (panic in debug, stale bits
+    /// in release). `width` and `put` clamp identically so the cmd
+    /// column stays aligned.
+    fn render_depth(self) -> u32 { (self.depth as u32).min(32) }
+    fn width(self) -> usize { self.render_depth() as usize * 2 }
 }
 
 impl Put for Indent {
     fn put<W: TinyWriter + ?Sized>(&self, w: &mut W) {
-        if self.depth == 0 { return; }
-        for i in 0..self.depth - 1 {
+        let depth = self.render_depth();
+        if depth == 0 { return; }
+        for i in 0..depth - 1 {
             let is_last = (self.mask >> i) & 1 != 0;
             w.put_bytes(if is_last { b"  " } else { "│ ".as_bytes() });
         }
-        let is_last = (self.mask >> (self.depth - 1)) & 1 != 0;
+        let is_last = (self.mask >> (depth - 1)) & 1 != 0;
         w.put_bytes(if is_last { "└─".as_bytes() } else { "├─".as_bytes() });
     }
 }
@@ -262,12 +269,21 @@ fn tree_walk(
 /// as the real delta fits in `2^(32 + SHIFT - 1)` counter units —
 /// see the `Packed::SHIFT` doc for the per-platform ceiling (~10M
 /// cores on Linux, ~137 cores on macOS, both at 2 s steady-state).
+///
+/// `age_secs` is the process-identity check: prev matches by pid only,
+/// and on a fork-heavy host a pid can be reused between ticks — the
+/// newcomer's small counter minus the dead process's large one wraps
+/// to a near-2^31 delta (CPU% in the millions, forced visible,
+/// inherited hysteresis). A process younger than the sample interval
+/// cannot have been the one observed last tick, which catches every
+/// reuse: the old owner was alive at the prev sample, so its
+/// replacement was necessarily born inside the interval.
 fn compute_cpu(
-    prev: &Map<'_, Packed>,
-    pid: u32, total: u64, ticks_per_sec: f64, dt: f64,
+    prev_entry: Option<Packed>,
+    age_secs: u32, total: u64, ticks_per_sec: f64, dt: f64,
 ) -> f32 {
-    if dt <= 0.01 { return 0.0; }
-    prev.get(&pid).map(|p| {
+    if dt <= 0.01 || (age_secs as f64) < dt { return 0.0; }
+    prev_entry.map(|p| {
         // Delta in the shifted domain (u31 wrapping), then
         // `<< SHIFT` to recover the real counter delta.
         let new_bits = ((total >> Packed::SHIFT) as u32) & Packed::CPU_MASK;
@@ -335,6 +351,15 @@ fn render_tree<W: TinyWriter + ?Sized>(
     gpu_total_mib: u64,
     has_gpu: bool,
 ) {
+    // Roots themselves can outnumber the terminal (a wide build in a
+    // short tmux split): emitting them all would push the frame past
+    // the height and scroll the 🌳 header off the top every tick —
+    // the exact bug class the child elision budget exists to prevent.
+    // The overflow gets no marker row: the cap itself is what protects
+    // the header, the situation is a degenerate layout, and a second
+    // emit_elision_row call site forces it out of line (~150 B) for a
+    // row that would only ever show in a shoebox terminal.
+    let n_roots = roots.len().min(max_rows);
     // Budget: roots always shown, remaining lines distributed to children.
     let child_budget = max_rows.saturating_sub(roots.len());
     let kids_in = |k: usize| -> usize {
@@ -346,15 +371,15 @@ fn render_tree<W: TinyWriter + ?Sized>(
     // Proportional allocation: each group gets a fair slot of child_budget;
     // if slot can't fit all children, one line of the slot becomes "...".
     let mut allocated = 0;
-    for k in 0..roots.len() {
+    for k in 0..n_roots {
         let root_ti = roots[k];
         let kids = kids_in(k);
         let slot = if k + 1 == roots.len() {
             child_budget.saturating_sub(allocated)
         } else if total_children > 0 {
-            // `as usize` truncates toward zero; the dividend is always
-            // non-negative, so that matches `.floor()` without pulling libm.
-            (child_budget as f64 * kids as f64 / total_children as f64) as usize
+            // Integer floor; child_budget (≤ terminal rows) × kids
+            // (≤ procs) stays far below usize overflow.
+            child_budget * kids / total_children
         } else { 0 };
         let (limit, used) = if slot >= kids {
             (kids, kids)
@@ -400,20 +425,11 @@ fn emit_elision_row<W: TinyWriter + ?Sized>(out: &mut W, more: usize, has_gpu: b
     let (r, g, b) = color;
     // Column widths (all blank): pid(7) + sp + cpu(6) + sp + mem(6) +
     //   [GPU_DATA_COLS * 7 if has_gpu] + sp + age(6) + 2 sp.
-    // Linux: 30 / 44. macOS: 30 / 37. Single literal space runs instead
-    // of formatter padding.
-    #[cfg(target_os = "macos")]
-    const ELISION_GPU: &[u8] = b"                                     "; // 37
-    #[cfg(not(target_os = "macos"))]
-    const ELISION_GPU: &[u8] = b"                                            "; // 44
-    let spaces: &[u8] = if has_gpu {
-        ELISION_GPU
-    } else {
-        b"                              "                // 30
-    };
-    twrite!(out, FgOpen(r, g, b));
-    out.put_bytes(spaces);
-    twrite!(out, indent, u32d(more as u32), " more...");
+    // Linux: 30 / 44. macOS: 30 / 37. `repeat` instead of literal space
+    // runs — the three static strings cost ~110 B of rodata.
+    let blanks = 30 + if has_gpu { GPU_DATA_COLS * 7 } else { 0 };
+    twrite!(out, FgOpen(r, g, b), bytes::repeat(' ', blanks),
+            indent, u32d(more as u32), " more...");
     out.put_bytes(FG_CLOSE_EOL);
 }
 
@@ -955,8 +971,20 @@ fn filter_with_children<'a>(
         // walk-up reparent) for ~6 fewer lines and no O(chain) walk for deep
         // invisible chains.
         let mut queue: FVec<(u32, u32)> = sub.vec("bfs_queue", n);
-        queue.extend(procs.iter().enumerate()
-            .filter_map(|(i, p)| p.visible().then_some((i as u32, i as u32))));
+        // Enqueue-once guard, one byte per proc. Without it a ppid
+        // cycle (possible via a pid-reuse race during the sequential
+        // /proc scan) loops this traversal forever, and a node that is
+        // both a seed and someone's child gets its subtree pushed
+        // twice — silently overflowing the n-capacity queue. Marked
+        // nodes still get threshold/reparent treatment when their
+        // parent pops; only the re-enqueue is skipped (their own
+        // children were already processed with identical state).
+        let mut enqueued: FVec<u8> = sub.vec("bfs_enqueued", n);
+        for (i, p) in procs.iter().enumerate() {
+            let vis = p.visible();
+            let _ = enqueued.push(vis as u8);
+            if vis { let _ = queue.push((i as u32, i as u32)); }
+        }
         while let Some((i, last_vis)) = queue.pop() {
             // Snapshot the ancestor state the inner loop needs, so the
             // body can hold a single `&mut` to the kid without fighting
@@ -970,7 +998,11 @@ fn filter_with_children<'a>(
                 if k.cpu >= thresh { k.set_visible(true); }
                 if k.visible() && !i_visible { k.ppid = last_vis_pid; }
                 let new_last = if k.visible() { kid } else { last_vis };
-                let _ = queue.push((kid, new_last));
+                let seen = &mut enqueued.as_mut_slice()[kid as usize];
+                if *seen == 0 {
+                    *seen = 1;
+                    let _ = queue.push((kid, new_last));
+                }
             }
         }
 
@@ -1097,14 +1129,13 @@ fn collect_procs<'a>(
 
         let rss_bytes = ti.pti_resident_size;
         let total_ticks = ti.pti_total_user + ti.pti_total_system;
-        let cpu = compute_cpu(prev, pid_u, total_ticks, mach_tps, dt);
+        let (age_secs, ppid) = macos_proc_age_ppid(pid, wall_now);
+        let cpu = compute_cpu(prev.get(&pid_u).copied(), age_secs, total_ticks, mach_tps, dt);
         next[i] = (pid_u, Packed::new(false, total_ticks));
 
         proc_name_into(pid, &mut comm_buf);
         let end = comm_buf.iter().position(|&b| b == 0).unwrap_or(comm_buf.len());
         let comm: &[u8] = &comm_buf[..end];
-
-        let (age_secs, ppid) = macos_proc_age_ppid(pid, wall_now);
 
         // Per-pid `compact`: allocate args_buf (4 KB, transient scratch)
         // above the eventual display string, build display, then shift
@@ -1152,7 +1183,19 @@ fn collect_procs<'a>(
             let is_related = always_show || is_lean_related(comm, args);
             f.str("display", |b| build_display_into(b, comm, args, is_related))
         });
-        if skip { continue; }
+        if skip {
+            // Same treatment as the Linux collect path: noise stays
+            // hidden (cpu zeroed, no display) but keeps its real ppid
+            // so it doesn't sever the ancestry chain for busy
+            // non-noise descendants.
+            procs[i] = ProcInfo {
+                pid: pid_u, ppid, cpu: 0.0, rss_kib: (rss_bytes >> 10) as u32,
+                age_visible: ProcInfo::pack(age_secs, false),
+                gpu: None,
+                display: FSmallStr::default(),
+            };
+            continue;
+        }
 
         procs[i] = ProcInfo {
             pid: pid_u, ppid, cpu, rss_kib: (rss_bytes >> 10) as u32,
@@ -1373,7 +1416,8 @@ fn collect_procs<'a>(
         let Some(parsed) = parsed else { continue; };
         let Parsed { ppid, total_ticks, age_secs, rss_bytes, comm_buf, comm_len } = parsed;
         let comm: &[u8] = &comm_buf[..comm_len as usize];
-        let cpu = compute_cpu(prev, pid, total_ticks, clock_ticks, dt);
+        let prev_entry = prev.get(&pid).copied();
+        let cpu = compute_cpu(prev_entry, age_secs, total_ticks, clock_ticks, dt);
         // Overwrite the placeholder pushed above with the real
         // total (visible=false; filter_with_children flips it on
         // per-entry during its retain pass).
@@ -1384,7 +1428,14 @@ fn collect_procs<'a>(
         // minimal display. They still go into the output so filter_with_children
         // can resolve tree parents through them.
         let rss_mb = rss_bytes / (1024 * 1024);
-        let may_qualify = cpu >= CHILD_CPU_THRESH || rss_mb >= MEM_MB_THRESH
+        // The hysteresis band: a previously-visible child stays shown
+        // down to CHILD_CPU_KEEP_THRESH, so it needs its argv display
+        // too — gating on CHILD_CPU_THRESH alone made kept rows in the
+        // 0.3..1.0% band flicker back to bare comm.
+        let kept_visible = cpu >= CHILD_CPU_KEEP_THRESH
+            && prev_entry.map(|p| p.visible()).unwrap_or(false);
+        let may_qualify = cpu >= CHILD_CPU_THRESH || kept_visible
+            || rss_mb >= MEM_MB_THRESH
             || gpu_pids.contains(&pid) || matches!(comm, b"lean" | b"lake");
         if !may_qualify {
             let display = frame.str("display_fallback", |b| b.extend_from_slice(comm)).into_small();
@@ -1401,6 +1452,7 @@ fn collect_procs<'a>(
         // all reclaimed as soon as the display is returned. Zero
         // persistent arena cost for cmdline or scratch.
         let mut keep = false;
+        let mut noise = false;
         let mut visible = false;
         // Linux permits argv+envp up to RLIMIT_STACK/4 (~2 MB at the
         // default 8 MB stack) — far beyond the 512 KB arena, and a huge
@@ -1443,6 +1495,7 @@ fn collect_procs<'a>(
             }
             let args = &args_arr[..args_len];
             if is_noise(comm, args) {
+                noise = true;
                 return inner.empty::<u8>();
             }
             let always_show = is_lean_or_lake(comm, args);
@@ -1453,10 +1506,19 @@ fn collect_procs<'a>(
             keep = true;
             inner.str("display", |b| build_display_into(b, comm, args, is_related))
         }).into_small_lossy();
-        if keep {
-            procs[i] = ProcInfo { pid, ppid, cpu, rss_kib: (rss_bytes >> 10) as u32,
+        // Noise procs stay permanently hidden but keep their real ppid:
+        // a zeroed stub severs the ancestry chain, so a busy non-noise
+        // grandchild under a visible terminal could never be reached by
+        // filter_with_children's traversal. cpu is zeroed — it's what
+        // the child-visibility rule keys on — and the display is empty
+        // (never rendered).
+        if keep || noise {
+            procs[i] = ProcInfo { pid, ppid,
+                                  cpu: if keep { cpu } else { 0.0 },
+                                  rss_kib: (rss_bytes >> 10) as u32,
                                   age_visible: ProcInfo::pack(age_secs, visible),
-                                  gpu: None, display };
+                                  gpu: None,
+                                  display: if keep { display } else { FSmallStr::default() } };
         }
     }
     (procs, next)
@@ -1465,7 +1527,12 @@ fn collect_procs<'a>(
 #[cfg(target_os = "linux")]
 fn parse_stat(stat: &[u8]) -> (&[u8], &[u8]) {
     let open = stat.iter().position(|&b| b == b'(').unwrap_or(0);
-    let close = stat.iter().rposition(|&b| b == b')').unwrap_or(stat.len());
+    // No ')' (truncated/garbled read) → empty comm and fields; the
+    // caller skips the process. Defaulting to stat.len() would make
+    // the `close + 1..` slice below panic-abort the monitor.
+    let Some(close) = stat.iter().rposition(|&b| b == b')') else {
+        return (&[], &[]);
+    };
     let comm = &stat[open + 1..close];
     let after = stat[close + 1..]
         .iter().position(|b| !b.is_ascii_whitespace())
@@ -1489,12 +1556,30 @@ fn parse_u64_ascii(s: &[u8]) -> Option<u64> {
 
 // ── Load average (POSIX getloadavg — works on Linux and macOS) ───────────────
 
-struct LoadAvg { loads: Option<[f64; 3]>, frac: f64 }
+/// Linux: the kernel already prints /proc/loadavg as "%.2f %.2f %.2f
+/// ..." — keep the first three fields verbatim instead of parsing all
+/// three to f64 and re-rendering them, which kept an `F2` formatter
+/// monomorph alive in the binary just for this line. Only the first
+/// value is parsed (for the header color fraction).
+#[cfg(target_os = "linux")]
+struct LoadAvg { text: [u8; 24], len: u8, frac: f64 }
+#[cfg(target_os = "linux")]
+impl Put for LoadAvg {
+    fn put<W: TinyWriter + ?Sized>(&self, w: &mut W) {
+        if self.len == 0 { w.put_byte(b'?'); return; }
+        w.put_bytes(&self.text[..self.len as usize]);
+    }
+}
 
+/// macOS: loads arrive as doubles (vm_loadavg's fixed-point scaled),
+/// so they're formatted with `f2`.
+#[cfg(target_os = "macos")]
+struct LoadAvg { loads: Option<[f64; 3]>, frac: f64 }
+#[cfg(target_os = "macos")]
 impl Put for LoadAvg {
     fn put<W: TinyWriter + ?Sized>(&self, w: &mut W) {
         let Some(l) = self.loads else { w.put_byte(b'?'); return; };
-        twrite!(w, f2(l[0]), " ", f2(l[1]), " ", f2(l[2]));
+        twrite!(w, bytes::f2(l[0]), " ", bytes::f2(l[1]), " ", bytes::f2(l[2]));
     }
 }
 
@@ -1506,26 +1591,35 @@ fn load_avg(num_cpus: f64) -> LoadAvg {
     // /proc/loadavg: "0.12 0.34 0.56 1/123 456\n".
     let mut buf = [0u8; 128];
     let Some(text) = read_small_file(c"/proc/loadavg", &mut buf) else {
-        return LoadAvg { loads: None, frac: 0.0 };
+        return LoadAvg { text: [0; 24], len: 0, frac: 0.0 };
     };
-    let mut it = bytes::split_ascii_whitespace(text);
-    let parse = |s: &[u8]| -> f64 {
-        // /proc/loadavg is always "N.DD" (two decimals); split on '.',
-        // parse each half as u64, combine. Avoids the f64 parser
-        // (Grisu + Dragon, ~10 KB of .text).
-        let mut parts = s.split(|&b| b == b'.');
-        let whole = parse_u64_ascii(parts.next().unwrap_or(b"0")).unwrap_or(0);
-        let frac = parse_u64_ascii(parts.next().unwrap_or(b"0")).unwrap_or(0);
-        whole as f64 + frac as f64 * 0.01
-    };
-    let (a, b, c) = (it.next(), it.next(), it.next());
-    match (a, b, c) {
-        (Some(a), Some(b), Some(c)) => {
-            let loads = [parse(a), parse(b), parse(c)];
-            LoadAvg { loads: Some(loads), frac: (loads[0] / num_cpus).min(1.0) }
+    // First three whitespace-separated fields, verbatim. Their end is
+    // the 3rd space's position (fields are single-space separated).
+    let mut spaces = 0usize;
+    let mut end = 0usize;
+    for (i, &b) in text.iter().enumerate() {
+        if b == b' ' {
+            spaces += 1;
+            if spaces == 3 { end = i; break; }
         }
-        _ => LoadAvg { loads: None, frac: 0.0 },
     }
+    if end == 0 || end > 24 {
+        return LoadAvg { text: [0; 24], len: 0, frac: 0.0 };
+    }
+    let mut out = [0u8; 24];
+    out[..end].copy_from_slice(&text[..end]);
+    // loads[0] alone drives the color fraction: "N.DD" — accumulate
+    // the digits (skipping the dot) into hundredths. Avoids the f64
+    // parser (Grisu + Dragon, ~10 KB of .text) and a slice::Split
+    // monomorph.
+    let mut hundredths: u64 = 0;
+    for &b in &text[..end] {
+        if b == b' ' { break; }
+        let d = b.wrapping_sub(b'0');
+        if d < 10 { hundredths = hundredths * 10 + d as u64; }
+    }
+    let load0 = hundredths as f64 * 0.01;
+    LoadAvg { text: out, len: end as u8, frac: (load0 / num_cpus).min(1.0) }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -1895,11 +1989,11 @@ impl Put for Truncate<'_> {
 /// only genuinely-float input and goes through the one remaining float
 /// pipeline.
 fn row_color(cpu: f32, rss_kib: u32, gpu: &Option<GpuUsage>, gpu_total_mib: u64) -> (u8, u8, u8) {
-    // Redness saturates at 4 GiB of RSS (4 << 20 KiB).
-    #[cfg(not(target_os = "macos"))]
+    // Redness saturates at 4 GiB of RSS (4 << 20 KiB). One formula for
+    // both platforms; the `mut` is only exercised on Linux (per-process
+    // GPU memory feeds redness below), so mac allows the unused_mut.
+    #[cfg_attr(target_os = "macos", allow(unused_mut))]
     let mut r = (rss_kib as u64 * 255 / (4u64 << 20)).min(255) as u8;
-    #[cfg(target_os = "macos")]
-    let r = (rss_kib as u64 * 255 / (4u64 << 20)).min(255) as u8;
     // Blueness saturates at 100% CPU. Truncate-to-u32 + integer
     // scale keeps us off the f64 pipeline (cvt/divsd/mulsd/maxsd/
     // cvttsd2si, ~40 B); CPU inputs come from integer /proc/stat
@@ -1928,6 +2022,136 @@ fn frac_color(red_frac: f64, blue_frac: f64) -> (u8, u8, u8) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::arena::FSmallStr;
+
+    fn proc_info(pid: u32, ppid: u32, cpu: f32, visible: bool) -> ProcInfo<'static> {
+        ProcInfo {
+            pid, ppid, cpu, rss_kib: 1024,
+            age_visible: ProcInfo::pack(100, visible),
+            gpu: None,
+            display: FSmallStr::default(),
+        }
+    }
+
+    #[test]
+    fn packed_round_trips_at_boundaries() {
+        for total in [0u64, 1 << Packed::SHIFT, u64::MAX] {
+            let mut p = Packed::new(false, total);
+            assert!(!p.visible());
+            assert_eq!(p.cpu_bits(), ((total >> Packed::SHIFT) as u32) & Packed::CPU_MASK);
+            let bits = p.cpu_bits();
+            p.set_visible();
+            assert!(p.visible());
+            assert_eq!(p.cpu_bits(), bits, "set_visible must not disturb cpu bits");
+        }
+        assert!(Packed::new(true, 7).visible());
+    }
+
+    #[test]
+    fn truncate_edges() {
+        let put = |s: &[u8], max: usize| {
+            let mut v = Vec::new();
+            truncate(s, max).put(&mut v);
+            v
+        };
+        assert_eq!(put(b"hello", 5), b"hello");        // exact fit
+        assert_eq!(put(b"hello!", 5), b"he...");       // ellipsis within max
+        assert_eq!(put(b"hello", 3), b"hel");          // too narrow for "..."
+        assert_eq!(put(b"hello", 0), b"");
+        // Never splits a UTF-8 codepoint: 🌳 is 4 bytes at offset 1.
+        let v = put("a🌳bc".as_bytes(), 6);
+        assert_eq!(v, b"a...");
+    }
+
+    #[test]
+    fn compute_cpu_ignores_reused_pid() {
+        // prev knew pid 42 with a large counter; a young process now
+        // owns the pid. Matching them would wrap to a huge delta.
+        let prev_entry = Some(Packed::new(false, u32::MAX as u64));
+        let young = compute_cpu(prev_entry, /*age_secs=*/0, 100, 100.0, 2.0);
+        assert_eq!(young, 0.0, "process younger than dt cannot match prev");
+        let old = compute_cpu(prev_entry, /*age_secs=*/60, u32::MAX as u64 + (200 << Packed::SHIFT), 100.0, 2.0);
+        assert!(old > 0.0, "same-identity delta should survive");
+    }
+
+    /// A hidden intermediate (e.g. noise) with a real ppid must not
+    /// sever the chain: the busy grandchild becomes visible and is
+    /// reparented to the nearest visible ancestor. This is the
+    /// regression test for noise stubs that used to keep ppid = 0.
+    #[test]
+    fn filter_reaches_through_hidden_parent() {
+        let _g = crate::arena::test_lock();
+        crate::arena::scope(|frame| {
+            let mut procs: FVec<ProcInfo> = frame.vec("t/procs", 8);
+            let _ = procs.push(proc_info(100, 1, 6.0, true));    // visible terminal
+            let _ = procs.push(proc_info(200, 100, 0.0, false)); // hidden noise
+            let _ = procs.push(proc_info(300, 200, 2.0, false)); // busy grandchild
+            let mut next: FVec<(u32, Packed)> = frame.vec("t/next", 8);
+            for p in procs.iter() { let _ = next.push((p.pid, Packed::new(false, 0))); }
+            let prev = crate::map::Map::new(&[]);
+            filter_with_children(frame, &mut procs, &prev, &mut next);
+            let pids: Vec<(u32, u32)> = procs.iter().map(|p| (p.pid, p.ppid)).collect();
+            assert_eq!(pids, vec![(100, 1), (300, 100)],
+                       "grandchild visible and reparented to the terminal");
+        });
+    }
+
+    /// A ppid cycle (pid-reuse race during the /proc scan) must not
+    /// hang the traversal — this looped forever before the
+    /// enqueue-once guard.
+    #[test]
+    fn filter_survives_ppid_cycle() {
+        let _g = crate::arena::test_lock();
+        crate::arena::scope(|frame| {
+            let mut procs: FVec<ProcInfo> = frame.vec("t/procs", 8);
+            let _ = procs.push(proc_info(10, 20, 9.0, true)); // visible, in-cycle
+            let _ = procs.push(proc_info(20, 10, 2.0, false)); // cycle partner
+            let mut next: FVec<(u32, Packed)> = frame.vec("t/next", 8);
+            for p in procs.iter() { let _ = next.push((p.pid, Packed::new(false, 0))); }
+            let prev = crate::map::Map::new(&[]);
+            filter_with_children(frame, &mut procs, &prev, &mut next);
+            assert!(procs.iter().any(|p| p.pid == 10), "seed survives");
+        });
+    }
+
+    /// More visible roots than terminal rows must not overflow the
+    /// frame (it scrolled the header off every tick).
+    #[test]
+    fn render_tree_caps_roots_at_max_rows() {
+        let procs: Vec<ProcInfo> = (0..6).map(|i| proc_info(100 + i, 1, 6.0, true)).collect();
+        let tree: Vec<(Indent, u32)> =
+            (0..6).map(|i| (Indent { depth: 0, mask: 0 }, i as u32)).collect();
+        let roots: Vec<usize> = (0..6).collect();
+        let count_rows = |max_rows: usize| {
+            let mut out = Vec::new();
+            render_tree(&mut out, &procs, &tree, &roots, max_rows, 80, 0, false);
+            out.windows(FG_CLOSE_EOL.len()).filter(|w| *w == FG_CLOSE_EOL).count()
+        };
+        assert_eq!(count_rows(3), 3, "capped at the terminal height");
+        assert_eq!(count_rows(6), 6, "exact fit");
+        assert_eq!(count_rows(10), 6);
+        assert_eq!(count_rows(0), 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_stat_without_close_paren_returns_empty() {
+        assert_eq!(parse_stat(b"123 (comm-with-no-close"), (&[][..], &[][..]));
+        let (comm, after) = parse_stat(b"123 (a b) R 4 5");
+        assert_eq!(comm, b"a b");
+        assert_eq!(after, b"R 4 5");
+    }
+
+    /// Indent glyphs past depth 32 must not wrap the mask shift
+    /// (debug builds panicked; release read stale bits).
+    #[test]
+    fn indent_survives_depth_past_mask_width() {
+        let mut v = Vec::new();
+        Indent { depth: 40, mask: u32::MAX }.put(&mut v);
+        assert!(!v.is_empty());
+    }
+
     /// `macos_proc_args_into` must yield `[argv0, argv1, ...]` with the
     /// KERN_PROCARGS2 blob's leading exec_path skipped — the Linux
     /// layout every classifier assumes. Spawn a child whose argv[0]
