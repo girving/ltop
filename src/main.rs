@@ -1166,9 +1166,12 @@ fn macos_args_blob_size(pid: u32) -> Option<usize> {
 }
 
 /// Read KERN_PROCARGS2 for a PID into `buf`, then fill `out` with
-/// [exec_path, argv0, ...] as byte slices borrowing from `buf`. Returns
-/// the number of slices written. `out` is a stack-array of 64 slots
-/// (mirrors the Linux side).
+/// [argv0, argv1, ...] as byte slices borrowing from `buf`. Returns
+/// the number of slices written. `out` is a stack-array of 64 slots.
+/// The blob's leading exec_path is skipped so the layout matches the
+/// Linux side exactly — the classifiers (`find_script_arg`'s
+/// `.skip(1)`, `is_lean_related`'s `.take(3)`) and `build_display_into`
+/// all assume `args[0]` is argv[0].
 ///
 /// `buf` must be sized by the caller to the full blob (argc + exec_path +
 /// argv + **envp**) — see `macos_args_blob_size`. We only want argv, but
@@ -1194,15 +1197,13 @@ fn macos_proc_args_into<'buf>(
 
     // Layout: [argc: i32] [exec_path\0] [null padding] [argv[0]\0] [argv[1]\0] ...
     let argc = i32::from_ne_bytes(buf[..4].try_into().unwrap_or([0; 4])).max(0) as usize;
-    let max_slots = out.len();          // 64 — fixed
-    let want = (argc + 1).min(max_slots); // exec_path + argc argv entries, clamped
-    let mut n = 0usize;
+    let want = argc.min(out.len());     // argv entries only, clamped to 64
     let mut i = 4usize;
+    // Skip exec_path and the null padding that follows it.
+    while i < size && buf[i] != 0 { i += 1; }
+    while i < size && buf[i] == 0 { i += 1; }
+    let mut n = 0usize;
     while i < size && n < want {
-        // After the exec_path, skip null padding before argv[0].
-        if n == 1 {
-            while i < size && buf[i] == 0 { i += 1; }
-        }
         let start = i;
         while i < size && buf[i] != 0 { i += 1; }
         if i > start {
@@ -1908,4 +1909,33 @@ fn row_color(cpu: f32, rss_kib: u32, gpu: &Option<GpuUsage>, gpu_total_mib: u64)
 
 fn frac_color(red_frac: f64, blue_frac: f64) -> (u8, u8, u8) {
     ((red_frac.min(1.0) * 255.0) as u8, 0, (blue_frac.min(1.0) * 255.0) as u8)
+}
+
+#[cfg(test)]
+mod tests {
+    /// `macos_proc_args_into` must yield `[argv0, argv1, ...]` with the
+    /// KERN_PROCARGS2 blob's leading exec_path skipped — the Linux
+    /// layout every classifier assumes. Spawn a child whose argv[0]
+    /// differs from its executable path so the two are distinguishable
+    /// (a plain spawn has argv[0] == exec_path and can't catch an
+    /// off-by-one).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_args_skip_exec_path() {
+        use std::os::unix::process::CommandExt;
+        let mut child = std::process::Command::new("/bin/sleep")
+            .arg0("ltop-argv0-probe")
+            .arg("30")
+            .spawn()
+            .expect("spawn sleep");
+        let pid = child.id();
+        let cap = super::macos_args_blob_size(pid).expect("KERN_PROCARGS2 size");
+        let mut buf = vec![0u8; cap];
+        let mut out: [&[u8]; 64] = [&[][..]; 64];
+        let n = super::macos_proc_args_into(pid, &mut buf, &mut out);
+        let got: Vec<Vec<u8>> = out[..n].iter().map(|s| s.to_vec()).collect();
+        child.kill().ok();
+        child.wait().ok();
+        assert_eq!(got, vec![b"ltop-argv0-probe".to_vec(), b"30".to_vec()]);
+    }
 }
