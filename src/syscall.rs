@@ -243,12 +243,13 @@ mod linux {
     }
 
     // Linux aarch64 syscall ABI: number in x8; args in x0..x5; return in x0.
-    // The `svc #0` instruction clobbers x0 (return) — the kernel may also
-    // touch x1..x7 on some syscall paths, so we mark each argument register
-    // we set as `in(...)` (lateout semantics fall out naturally: the compiler
-    // treats them as clobbered). Syscall numbers match Linux's asm-generic
-    // table (same as riscv64, loongarch64); they are *not* the same as
-    // x86_64's.
+    // Plain `in(...)` on the argument registers is sound here because the
+    // kernel restores x1..x7 from the saved pt_regs on every syscall return
+    // (arch/arm64/kernel/entry.S kernel_exit) — only x0 carries a result,
+    // and it's declared as an output. Note `in(...)` promises the asm block
+    // preserves the register; it does NOT mark it clobbered. Syscall numbers
+    // match Linux's asm-generic table (same as riscv64, loongarch64); they
+    // are *not* the same as x86_64's.
     #[cfg(target_arch = "aarch64")]
     mod aarch64 {
         use core::arch::asm;
@@ -350,11 +351,17 @@ mod linux {
 // Darwin aarch64 syscall ABI: number in x16; args in x0..x5; `svc #0x80`
 // traps into the kernel. Return in x0. Unlike Linux, Darwin signals
 // errors via the carry flag (CF=1 → x0 holds errno, CF=0 → x0 is the
-// success value). We fold that into Linux-shape negative-errno with one
-// instruction: `csneg x0, x0, x0, cc` sets x0 to -x0 when CF=1, leaves
-// it alone otherwise. So from the Rust side every Darwin syscall looks
-// identical to a Linux one: non-negative result on success, -errno on
-// error.
+// success value). We fold that into Linux-shape negative-errno with a
+// `b.cc`-guarded `neg x0, x0`. So from the Rust side every Darwin
+// syscall looks identical to a Linux one: non-negative result on
+// success, -errno on error.
+//
+// Unlike Linux, xnu writes x1 on every BSD syscall return
+// (bsd/dev/arm/systemcalls.c arm_prepare_u64_syscall_return: 0 on
+// error; uu_rval[1] or 0 on success, by return type), so every BSD
+// wrapper must declare x1 as clobbered — the register does NOT survive
+// the `svc`. Mach traps write only x0 (osfmk/arm64/sleh.c), but these
+// wrappers also serve the traps above, and the extra clobber is free.
 //
 // Syscall numbers come from xnu's `bsd/kern/syscalls.master`. Apple's
 // stance is "libSystem is the ABI, syscall numbers are not" — but in
@@ -402,6 +409,7 @@ mod darwin {
                 "1:",
                 in("x16") n,
                 inlateout("x0") a1 => ret,
+                lateout("x1") _,
                 options(nostack),
             );
             ret
@@ -417,7 +425,7 @@ mod darwin {
                 "1:",
                 in("x16") n,
                 inlateout("x0") a1 => ret,
-                in("x1") a2,
+                inlateout("x1") a2 => _,
                 options(nostack),
             );
             ret
@@ -433,7 +441,7 @@ mod darwin {
                 "1:",
                 in("x16") n,
                 inlateout("x0") a1 => ret,
-                in("x1") a2,
+                inlateout("x1") a2 => _,
                 in("x2") a3,
                 options(nostack),
             );
@@ -450,7 +458,7 @@ mod darwin {
                 "1:",
                 in("x16") n,
                 inlateout("x0") a1 => ret,
-                in("x1") a2,
+                inlateout("x1") a2 => _,
                 in("x2") a3,
                 in("x3") a4,
                 options(nostack),
@@ -468,7 +476,7 @@ mod darwin {
                 "1:",
                 in("x16") n,
                 inlateout("x0") a1 => ret,
-                in("x1") a2,
+                inlateout("x1") a2 => _,
                 in("x2") a3,
                 in("x3") a4,
                 in("x4") a5,
