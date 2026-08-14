@@ -960,6 +960,15 @@ fn filter_with_children<'a>(
     // `procs` and `next` are 'a-scoped outer buffers; mutating them
     // from inside the sub-scope is fine because neither mutation needs
     // frame allocation — just &mut on the buffers.
+    // The procs[i]/next[i] lockstep is maintained independently by both
+    // platforms' collect_procs (push placeholder first, overwrite at i);
+    // an early `continue` inserted before either overwrite would desync
+    // them with no compile-time signal. Tripwire for dev builds.
+    debug_assert!(
+        procs.len() == next.len()
+            && procs.iter().zip(next.iter()).all(|(p, n)| p.pid == n.0),
+        "collect_procs pushed procs and next out of lockstep",
+    );
     frame.scope(|sub| {
         let n = procs.len() as u32;
         let pid_to_idx = build_pid_to_idx(sub, procs);
