@@ -640,7 +640,10 @@ fn fb_memory(fd: i32, client: u32, subdevice: u32) -> Option<(u64, u64)> {
     };
     rm_control(fd, client, subdevice, NV2080_CTRL_CMD_FB_GET_INFO, &mut params)?;
     let (total_kib, free_kib) = (list[0].data as u64, list[1].data as u64);
-    Some(((total_kib - free_kib) >> 10, total_kib >> 10))
+    // saturating: a driver quirk reporting HEAP_FREE > TOTAL_RAM_SIZE
+    // (SMC-partitioned subdevices, transient alloc races) must clamp to
+    // 0 used, not wrap to ~u64::MAX and blow up the rendered totals.
+    Some((total_kib.saturating_sub(free_kib) >> 10, total_kib >> 10))
 }
 
 /// Pull the latest GPUMON graphics-engine sample: returns this GPU's
@@ -661,7 +664,12 @@ fn perfmon_util(fd: i32, client: u32, subdevice: u32, buf: &mut NvPerfmonUtilPar
                   * NV2080_CTRL_PERF_GPUMON_SAMPLE_COUNT_PERFMON_UTIL) as u32;
     if rm_control(fd, client, subdevice,
                   NV2080_CTRL_CMD_PERF_GET_GPUMON_PERFMON_UTIL_SAMPLES_V2, buf).is_none() { return 0; }
-    let n = buf.count as usize;
+    // `count` is kernel-written output. The VF handler rejects any
+    // bufSize that isn't exactly the 72-slot ring, so count > ring is
+    // only reachable via driver/firmware corruption — but the clamp is
+    // free and turns that abort (index panic under panic=immediate-
+    // abort) into a stale-sample read, matching pid_tbl_count's clamp.
+    let n = (buf.count as usize).min(NV2080_CTRL_PERF_GPUMON_SAMPLE_COUNT_PERFMON_UTIL);
     if n == 0 { return 0; }
     let gr = &buf.samples[n - 1].gr;
     let pct = gr.util / 100;
@@ -705,6 +713,28 @@ fn proc_memory(fd: i32, client: u32, subdevice: u32,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Pin every kernel-ABI struct against the byte size its driver
+    /// header documents (the literal each struct's comment quotes). A
+    /// reordered or mis-typed field stays Zeroable-sound but silently
+    /// truncates/misaligns the ioctl payload — garbage GPU stats with
+    /// no other signal. Same pattern as sandbox.rs's
+    /// kernel_struct_layout. Runs on every host, no GPU needed.
+    #[test]
+    fn struct_sizes_match_driver_headers() {
+        use core::mem::size_of;
+        assert_eq!(size_of::<NvIoctlCardInfo>(), 72);
+        assert_eq!(size_of::<NvEngineUtilSample>(), 128);
+        assert_eq!(size_of::<NvPerfmonUtilSample>(), 776);
+        assert_eq!(size_of::<NvGetPidsParams>(), 3812);
+        assert_eq!(size_of::<NvVideoMemoryUsageData>(), 48);
+        assert_eq!(size_of::<NvSmcSubscriptionInfo>(), 8);
+        assert_eq!(size_of::<NvPidInfo>(), 72);
+        assert_eq!(size_of::<NvGetPidInfoParams>(), 14408);
+        // V2 params: 16-byte header (u8 + 3 pad + 3×u32) + the 72-slot ring.
+        assert_eq!(size_of::<NvPerfmonUtilParams>(),
+                   16 + 72 * size_of::<NvPerfmonUtilSample>());
+    }
 
     // Requires an NVIDIA driver + /dev/nvidiactl access. build.rs probes
     // for /dev/nvidiactl and sets cfg(has_gpu) when present, so these auto-
