@@ -36,8 +36,8 @@ const MIN_BINARY: &str = "target/aarch64-apple-darwin/min/ltop";
 // is the integer floor of (display KB × 1024); ~100 B of LTO/linker
 // drift fits within the rounding gap. Today's actual sizes (post
 // 2026-07-08 audit fixes):
-//   Linux x86_64   ~24,263 B → 23.8 KB
-//   Linux aarch64  ~22,876 B → 22.5 KB  (arm64 fixed-width insns +
+//   Linux x86_64   ~24,159 B → 23.8 KB
+//   Linux aarch64  ~22,808 B → 22.5 KB  (arm64 fixed-width insns +
 //                                        no compiler_builtins memcpy
 //                                        come out smaller than x86_64
 //                                        on our control-flow shape)

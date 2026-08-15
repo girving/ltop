@@ -675,13 +675,16 @@ pub(crate) fn run(flags: u64) {
                     page_size, clock_ticks, boot, wall_now, dt,
                     &prev_map, gpu_pids, tick,
                 );
-                filter_with_children(tick, &mut procs, &prev_map, &mut next);
-
+                // GPU usage attaches BEFORE the filter: the coalesce
+                // pass inside filter_with_children folds descendants'
+                // stats into their app root, and for Electron apps the
+                // GPU numbers live on helper processes the fold hides.
                 for p in procs.iter_mut() {
                     if let Some(usage) = gpu.usage(p.pid) {
                         p.gpu = Some(usage);
                     }
                 }
+                filter_with_children(tick, &mut procs, &prev_map, &mut next);
                 // Delegate to sort.rs's in-place heapsort (via map.rs's
                 // shared re-export) instead of `sort_unstable_by_key` — the
                 // latter monomorphises Rust's generic quicksort on ProcInfo
@@ -949,6 +952,14 @@ impl Packed {
 const CHILD_CPU_THRESH: f32 = 1.0;
 const CHILD_CPU_KEEP_THRESH: f32 = 0.3;
 
+/// App roots whose entire process subtree renders as one summed row.
+/// Case-SENSITIVE compare (unlike the `ieq`-based classifiers): the
+/// "Claude" desktop app must not match the "claude" CLI, whose child
+/// processes are exactly what this monitor exists to show.
+fn is_coalesced(display: &[u8]) -> bool {
+    display == b"Linear" || display == b"Claude"
+}
+
 fn filter_with_children<'a>(
     frame: &mut Frame<'a>,
     procs: &mut FVec<'a, ProcInfo<'a>>,
@@ -1017,6 +1028,57 @@ fn filter_with_children<'a>(
                 if *seen == 0 {
                     *seen = 1;
                     let _ = queue.push((kid, new_last));
+                }
+            }
+        }
+
+        // Coalesce configured app subtrees into their root's row —
+        // Electron apps are one logical thing sprawled over a
+        // main + zygote/helper process tree. Every proc walks its ppid
+        // chain to the nearest coalescing ancestor (flat loop — cheaper
+        // in bytes than a second subtree traversal) and folds its
+        // cpu/rss/gpu into it, hiding itself; the root surfaces if
+        // anything folded into it was visible. The hop cap bounds
+        // ppid cycles. Nested coalesce roots fold approximately
+        // (nearest ancestor wins per proc) — Electron doesn't nest.
+        for idx in 0..procs.len() {
+            let mut a = procs[idx].ppid;
+            let mut hops = 0u32;
+            let root = loop {
+                let Some(&pa) = pid_to_idx.get(&a) else { break None };
+                let pa = pa as usize;
+                if pa == idx { break None; } // self-cycle
+                if is_coalesced(procs[pa].display.as_slice()) { break Some(pa); }
+                a = procs[pa].ppid;
+                hops += 1;
+                if hops > 64 { break None; }
+            };
+            let Some(r) = root else { continue };
+            let k = &mut procs[idx];
+            let vis = k.visible();
+            let (cpu, rss, gpu) = (k.cpu, k.rss_kib, k.gpu.take());
+            k.set_visible(false);
+            k.cpu = 0.0;
+            k.rss_kib = 0;
+            let p = &mut procs[r];
+            if vis { p.set_visible(true); }
+            p.cpu += cpu;
+            p.rss_kib = p.rss_kib.saturating_add(rss);
+            if let Some(g) = gpu {
+                #[cfg(target_os = "macos")]
+                {
+                    let s0 = p.gpu.take().map(|h| h.sm_pct).unwrap_or(0);
+                    p.gpu = Some(GpuUsage { sm_pct: s0 + g.sm_pct });
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let (s0, m0) = p.gpu.take()
+                        .map(|h| (h.sm_pct, h.mem_mib.get())).unwrap_or((0, 0));
+                    let mem = m0.saturating_add(g.mem_mib.get());
+                    // mem > 0: g.mem_mib is NonZero, so the sum is too.
+                    if let Some(mem_mib) = core::num::NonZeroU32::new(mem) {
+                        p.gpu = Some(GpuUsage { sm_pct: s0 + g.sm_pct, mem_mib });
+                    }
                 }
             }
         }
@@ -1838,8 +1900,10 @@ fn find_script_arg<'a>(args: &[&'a [u8]]) -> Option<&'a [u8]> {
     for &arg in args.iter().skip(1) {
         if skip_next { skip_next = false; continue; }
         if arg.starts_with(b"-") {
-            if matches!(arg,
-                b"-c" | b"-m" | b"-W" | b"-X" | b"-Q" | b"--check-hash-based-pycs")
+            // Value-taking interpreter flags: the short ones compare as
+            // one byte each instead of five slice-literal memcmps.
+            if (arg.len() == 2 && matches!(arg[1], b'c' | b'm' | b'W' | b'X' | b'Q'))
+                || arg == b"--check-hash-based-pycs"
             { skip_next = true; }
             continue;
         }
@@ -2109,6 +2173,51 @@ mod tests {
             let pids: Vec<(u32, u32)> = procs.iter().map(|p| (p.pid, p.ppid)).collect();
             assert_eq!(pids, vec![(100, 1), (300, 100)],
                        "grandchild visible and reparented to the terminal");
+        });
+    }
+
+    /// Coalesced apps render as one row: descendants' cpu/rss/gpu fold
+    /// into the root, the descendants disappear, and the root surfaces
+    /// because a member of its subtree was visible. The lowercase
+    /// "claude" CLI must NOT coalesce (case-sensitive match).
+    #[test]
+    fn filter_coalesces_configured_subtrees() {
+        let _g = crate::arena::test_lock();
+        crate::arena::scope(|frame| {
+            #[cfg(target_os = "macos")]
+            let gpu = Some(GpuUsage { sm_pct: 30 });
+            #[cfg(not(target_os = "macos"))]
+            let gpu = Some(GpuUsage {
+                sm_pct: 30,
+                mem_mib: core::num::NonZeroU32::new(64).unwrap(),
+            });
+
+            let linear = frame.str("t/n1", |b| b.extend_from_slice(b"Linear")).into_small();
+            let cli = frame.str("t/n2", |b| b.extend_from_slice(b"claude")).into_small();
+            let mut procs: FVec<ProcInfo> = frame.vec("t/procs", 8);
+            let _ = procs.push(ProcInfo { pid: 100, ppid: 1, cpu: 1.0, rss_kib: 100,
+                age_visible: ProcInfo::pack(10, false), gpu: None, display: linear });
+            let _ = procs.push(proc_info(200, 100, 3.0, true));   // helper (visible)
+            let _ = procs.push(proc_info(300, 200, 2.0, false));  // grandchild
+            procs.as_mut_slice()[2].gpu = gpu;
+            let _ = procs.push(ProcInfo { pid: 400, ppid: 1, cpu: 6.0, rss_kib: 100,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: cli });
+            let _ = procs.push(proc_info(500, 400, 6.0, true));   // CLI child stays
+
+            let mut next: FVec<(u32, Packed)> = frame.vec("t/next", 8);
+            for p in procs.iter() { let _ = next.push((p.pid, Packed::new(false, 0))); }
+            let prev = crate::map::Map::new(&[]);
+            filter_with_children(frame, &mut procs, &prev, &mut next);
+
+            let pids: Vec<u32> = procs.iter().map(|p| p.pid).collect();
+            assert_eq!(pids, vec![100, 400, 500], "subtree folded; CLI untouched");
+            let root = &procs.as_slice()[0];
+            assert_eq!(root.cpu, 6.0, "1 + 3 + 2");
+            assert_eq!(root.rss_kib, 100 + 2 * 1024);
+            let g = root.gpu.as_ref().expect("gpu folded up");
+            assert_eq!(g.sm_pct, 30);
+            #[cfg(not(target_os = "macos"))]
+            assert_eq!(g.mem_mib.get(), 64);
         });
     }
 

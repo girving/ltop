@@ -205,8 +205,16 @@ pub(crate) fn write_u32<W: TinyWriter + ?Sized>(w: &mut W, n: u32) {
 
 /// Digit count of `n`. Used by pad_* helpers to decide how many
 /// pad bytes to emit.
-pub(crate) fn digit_count(n: u32) -> u8 {
-    if n == 0 { 1 } else { (n as u64).ilog10() as u8 + 1 }
+pub(crate) fn digit_count(mut n: u32) -> u8 {
+    // Divide-by-10 loop: the constant division lowers to a
+    // multiply-shift, and the whole loop is ~30 B — ilog10's
+    // table/branch expansion was ~100 B here.
+    let mut d = 1;
+    while n >= 10 {
+        n /= 10;
+        d += 1;
+    }
+    d
 }
 
 // ── test-only writer into a Vec<u8> ────────────────────────────────────────
