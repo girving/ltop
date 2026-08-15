@@ -1867,6 +1867,10 @@ fn is_noise(comm: &[u8], args: &[&[u8]]) -> bool {
         || ieq(name, b"routined")
         || ieq(name, b"textunderstandingd")
         || ieq(name, b"corespeechd")
+        || ieq(name, b"characterpalette")          // emoji picker's glyph cache
+        // BlastDoor content-parsing sandboxes (Messages/IDS/Hubble/…):
+        // one suffix check covers the whole family.
+        || name.ends_with(b"BlastDoorService")
 }
 
 fn is_lean_or_lake(comm: &[u8], args: &[&[u8]]) -> bool {
