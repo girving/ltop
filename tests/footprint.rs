@@ -33,25 +33,27 @@ const MIN_BINARY: &str = "target/static-linux-aarch64/min/ltop";
 const MIN_BINARY: &str = "target/aarch64-apple-darwin/min/ltop";
 
 // Thresholds in BYTES, rounded up to the nearest 0.1 KB. Each number
-// is the integer floor of (display KB × 1024); a few tens of bytes of
-// LTO drift fits within the rounding gap. Today's actual sizes
-// (post-sandbox: seccomp-bpf with verb + arg filtering, plus
-// Landlock for /proc-only path access, plus errno reporting in the
-// sandbox install fail path):
-//   Linux x86_64   24,272 B  → 23.9 KB
-//   Linux aarch64  22,812 B  → 22.5 KB  (arm64 fixed-width insns +
+// is the integer floor of (display KB × 1024); ~100 B of LTO/linker
+// drift fits within the rounding gap. Today's actual sizes (post
+// 2026-07-08 audit fixes):
+//   Linux x86_64   ~24,263 B → 23.8 KB
+//   Linux aarch64  ~22,876 B → 22.5 KB  (arm64 fixed-width insns +
 //                                        no compiler_builtins memcpy
 //                                        come out smaller than x86_64
 //                                        on our control-flow shape)
-//   macOS arm64    33,328 B  → 32.6 KB  (verified identical on
-//                                        macos-14 CI runner and
-//                                        macos-26 dev host — Mach-O
-//                                        is reproducible across SDK
+//   macOS arm64    33,312 B  → 32.6 KB  (exact — Mach-O is
+//                                        reproducible across SDK
 //                                        versions for our build
 //                                        because we use only the
 //                                        syscall ABI)
+// The Linux numbers are macOS-host GNU cross-links (see
+// .cargo/link-and-strip.sh's Darwin branch) adjusted by the constant
+// offset that pipeline shows against CI's binaries at a known
+// commit (+11 B x86_64 / +24 B aarch64 — binutils-version and
+// gcc-driver-flag differences); CI's GNU output is authoritative and
+// this test is where it gets enforced.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-const MAX_SIZE: u64 = 239 * 1024 / 10;       // 23.9 KB = 24,473 B
+const MAX_SIZE: u64 = 238 * 1024 / 10;       // 23.8 KB = 24,371 B
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 const MAX_SIZE: u64 = 225 * 1024 / 10;       // 22.5 KB = 23,040 B
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

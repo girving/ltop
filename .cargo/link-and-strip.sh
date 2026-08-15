@@ -51,31 +51,63 @@ done
 if [ "$(uname -s)" = "Darwin" ]; then
     host=$(rustc -vV | sed -n 's/^host: //p')
     bindir="$(rustc --print sysroot)/lib/rustlib/$host/bin"
-    # Prefer the active toolchain's bundled tools (zero setup), but
-    # some nightlies ship a rust-lld/rust-objcopy with a broken
-    # libLLVM @rpath — fall back to Homebrew's (`brew install lld llvm`).
-    if ( "$bindir/rust-lld" -flavor gnu --version ) >/dev/null 2>&1; then
+    # Prefer real GNU binutils when installed (`brew install
+    # x86_64-elf-binutils aarch64-elf-binutils`): GNU ld's layout is
+    # what CI ships and what the README/footprint numbers describe, so
+    # a GNU-linked local binary is byte-comparable. Otherwise fall back
+    # to an LLVM toolchain — the active toolchain's bundled rust-lld
+    # (zero setup), or Homebrew's (`brew install lld llvm`) when a
+    # nightly ships rust-lld/rust-objcopy with a broken libLLVM @rpath.
+    # lld's layout differs from GNU's by ~100-200 B (8-byte fast
+    # build-id vs sha1, padding), so lld numbers are only good for
+    # same-linker deltas.
+    # The *-linux-gnu toolchains carry the linux emulations CI links
+    # with (the bare-ELF `aarch64elf` lays the first LOAD out without
+    # the ELF header, costing a full 64 K of max-page offset padding —
+    # bare-elf x86_64 is layout-compatible, so it stays as a fallback).
+    # aarch64: brew tap messense/macos-cross-toolchains &&
+    #          brew install aarch64-unknown-linux-gnu
+    # x86_64:  brew install x86_64-linux-gnu-binutils
+    case "$out" in
+        */static-linux-aarch64/*)
+            gnu=aarch64-linux-gnu; emu=aarch64linux ;;
+        *)
+            if command -v x86_64-linux-gnu-ld >/dev/null 2>&1; then
+                gnu=x86_64-linux-gnu
+            else
+                gnu=x86_64-elf
+            fi
+            emu=elf_x86_64 ;;
+    esac
+    if command -v "$gnu-ld" >/dev/null 2>&1; then
+        LLD() { "$gnu-ld" "$@"; }
+    elif ( "$bindir/rust-lld" -flavor gnu --version ) >/dev/null 2>&1; then
         LLD() { "$bindir/rust-lld" -flavor gnu "$@"; }
     elif command -v ld.lld >/dev/null 2>&1; then
         LLD() { ld.lld "$@"; }
     else
-        echo "link-and-strip.sh: no working GNU-flavor lld (brew install lld)" >&2
+        echo "link-and-strip.sh: no GNU-flavor linker (brew install $gnu-binutils, or lld)" >&2
         exit 1
     fi
-    if ( "$bindir/rust-objcopy" --version ) >/dev/null 2>&1; then
-        OBJCOPY() { "$bindir/rust-objcopy" "$@"; }
+    if command -v "$gnu-strip" >/dev/null 2>&1; then
+        # Same invocation as the Linux branch, so the output matches CI's.
+        STRIP_EXTRA() {
+            "$gnu-strip" \
+                --strip-section-headers \
+                --remove-section=.stack_sizes \
+                --remove-section=.comment \
+                "$1" 2>/dev/null || true
+        }
+    elif ( "$bindir/rust-objcopy" --version ) >/dev/null 2>&1; then
+        STRIP_EXTRA() { "$bindir/rust-objcopy" --strip-sections "$1" 2>/dev/null || true; }
     elif command -v llvm-objcopy >/dev/null 2>&1; then
-        OBJCOPY() { llvm-objcopy "$@"; }
+        STRIP_EXTRA() { llvm-objcopy --strip-sections "$1" 2>/dev/null || true; }
     elif [ -x /opt/homebrew/opt/llvm/bin/llvm-objcopy ]; then
-        OBJCOPY() { /opt/homebrew/opt/llvm/bin/llvm-objcopy "$@"; }
+        STRIP_EXTRA() { /opt/homebrew/opt/llvm/bin/llvm-objcopy --strip-sections "$1" 2>/dev/null || true; }
     else
-        echo "link-and-strip.sh: no llvm-objcopy (brew install llvm)" >&2
+        echo "link-and-strip.sh: no strip/objcopy (brew install $gnu-binutils or llvm)" >&2
         exit 1
     fi
-    case "$out" in
-        */static-linux-aarch64/*) emu=aarch64linux ;;
-        *)                        emu=elf_x86_64 ;;
-    esac
     tmp="${TMPDIR:-/tmp}/ltop-lld-$$.args"
     : > "$tmp"
     for arg in "$@"; do
@@ -94,10 +126,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
         */min-stack/*) exit 0 ;;   # keep .stack_sizes for tools/stack-svg
     esac
     if [ -n "$out" ] && [ -f "$out" ]; then
-        # --strip-sections: drop all section headers plus any content
-        # not inside a LOAD segment — covers what the GNU branch's
-        # --strip-section-headers + --remove-section pair does.
-        OBJCOPY --strip-sections "$out" 2>/dev/null || true
+        STRIP_EXTRA "$out"
     fi
     exit 0
 fi

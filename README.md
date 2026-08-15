@@ -27,7 +27,7 @@ the cover library into the link.
 
 | Target | Binary | Startup RSS | Stable RSS |
 |---|---:|---:|---:|
-| Linux x86_64 | ≤ 23.9 KB | ~44 KB | ~44 KB |
+| Linux x86_64 | ≤ 23.8 KB | ~44 KB | ~44 KB |
 | Linux aarch64 | ≤ 22.5 KB | ~44 KB | ~44 KB |
 | macOS arm64 † | ≤ 32.6 KB | ~944 KB | ≤ 224 KB |
 
@@ -61,10 +61,10 @@ MIG over hand-rolled Mach traps, and all working memory lives in one
 512 KB bump arena instead of the heap (the global allocator aborts).
 That is a great deal of `unsafe` atop kernel ABIs — raw syscall
 wrappers, pointer-bumping arena internals, manual VM reclaim. The
-arena's space-time profile for one macOS tick mid-Mathlib-build (peak
-24 KB live of the 512 KB reservation) looks like:
+arena's space-time profile for one macOS tick (peak 19 KB live of the
+512 KB reservation) looks like:
 
-![macOS arena allocation trace — one tick, 24 KB peak](arena-trace.svg)
+![macOS arena allocation trace — one tick, 19 KB peak](arena-trace.svg)
 
 Possibly there are bugs! All code was written by Claude Opus 4.6
 through 4.8, so the fun question is whether Fable will find any bugs
