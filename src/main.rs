@@ -952,12 +952,80 @@ impl Packed {
 const CHILD_CPU_THRESH: f32 = 1.0;
 const CHILD_CPU_KEEP_THRESH: f32 = 0.3;
 
-/// App roots whose entire process subtree renders as one summed row.
-/// Case-SENSITIVE compare (unlike the `ieq`-based classifiers): the
-/// "Claude" desktop app must not match the "claude" CLI, whose child
-/// processes are exactly what this monitor exists to show.
-fn is_coalesced(display: &[u8]) -> bool {
-    display == b"Linear" || display == b"Claude"
+/// Electron names an app's service processes after the app itself:
+/// "Code Helper (Renderer)" under "Code", "Claude Helper (GPU)" under
+/// "Claude". So "is this proc a boring shard of that ancestor" is a
+/// name test — no per-app list, and byte compare keeps it case
+/// sensitive ("Claude Helper" never folds into the "claude" CLI, whose
+/// children are exactly what this monitor exists to show).
+fn is_helper_of(kid: &[u8], root: &[u8]) -> bool {
+    let n = root.len();
+    kid.len() >= n + 7 && kid[..n] == *root && kid[n..n + 7] == *b" Helper"
+}
+
+/// Nearest ancestor of `idx` that `idx` is named a helper of, via a
+/// flat ppid-chain walk (cheaper in bytes than a subtree traversal).
+/// The hop cap bounds ppid cycles (possible via a pid-reuse race
+/// during the sequential scan); a self-cycle needs no extra check
+/// because `is_helper_of(n, n)` is always false.
+fn coalesce_root(procs: &[ProcInfo], pid_to_idx: &Map<'_, u32>, idx: usize) -> Option<usize> {
+    let name = procs[idx].display.as_slice();
+    let mut a = procs[idx].ppid;
+    for _ in 0..64 {
+        let &pa = pid_to_idx.get(&a)?;
+        let pa = pa as usize;
+        if is_helper_of(name, procs[pa].display.as_slice()) { return Some(pa); }
+        a = procs[pa].ppid;
+    }
+    None
+}
+
+/// Coalesce Electron helper subtrees into their app's row — apps like
+/// Code or Linear are one logical thing sprawled over a main +
+/// zygote/helper process tree. Every helper-named proc (per
+/// [`is_helper_of`]) folds its cpu/rss/gpu into its app root, hiding
+/// itself; the root surfaces if anything folded in was visible.
+/// Non-helpers never fold — a `claude` CLI spawned by a plugin helper
+/// keeps its own subtree. Runs BEFORE the visibility BFS, which makes
+/// that survivor's reparenting free: its helper parent is already
+/// hidden (with cpu/rss zeroed, the thresholds can't resurface it), so
+/// the BFS hangs the survivor off the app root like any other visible
+/// proc under an invisible parent.
+///
+/// Out of line: inlined into `run`'s tick closure the walk pays ~100
+/// bytes of register spills against that huge frame.
+#[inline(never)]
+fn coalesce_helpers(procs: &mut [ProcInfo], pid_to_idx: &Map<'_, u32>) {
+    for idx in 0..procs.len() {
+        let Some(r) = coalesce_root(procs, pid_to_idx, idx) else { continue };
+        let k = &mut procs[idx];
+        let vis = k.visible();
+        let (cpu, rss, gpu) = (k.cpu, k.rss_kib, k.gpu.take());
+        k.set_visible(false);
+        k.cpu = 0.0;
+        k.rss_kib = 0;
+        let p = &mut procs[r];
+        if vis { p.set_visible(true); }
+        p.cpu += cpu;
+        p.rss_kib = p.rss_kib.saturating_add(rss);
+        if let Some(g) = gpu {
+            #[cfg(target_os = "macos")]
+            {
+                let s0 = p.gpu.take().map(|h| h.sm_pct).unwrap_or(0);
+                p.gpu = Some(GpuUsage { sm_pct: s0 + g.sm_pct });
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let (s0, m0) = p.gpu.take()
+                    .map(|h| (h.sm_pct, h.mem_mib.get())).unwrap_or((0, 0));
+                let mem = m0.saturating_add(g.mem_mib.get());
+                // mem > 0: g.mem_mib is NonZero, so the sum is too.
+                if let Some(mem_mib) = core::num::NonZeroU32::new(mem) {
+                    p.gpu = Some(GpuUsage { sm_pct: s0 + g.sm_pct, mem_mib });
+                }
+            }
+        }
+    }
 }
 
 fn filter_with_children<'a>(
@@ -985,6 +1053,8 @@ fn filter_with_children<'a>(
         let n = procs.len() as u32;
         let pid_to_idx = build_pid_to_idx(sub, procs);
         let children = build_children(sub, procs, &pid_to_idx);
+
+        coalesce_helpers(procs.as_mut_slice(), &pid_to_idx);
 
         // BFS from directly qualifying roots. Always traverse descendants so
         // we can reach high-CPU grandchildren under quiet parents; only mark
@@ -1028,57 +1098,6 @@ fn filter_with_children<'a>(
                 if *seen == 0 {
                     *seen = 1;
                     let _ = queue.push((kid, new_last));
-                }
-            }
-        }
-
-        // Coalesce configured app subtrees into their root's row —
-        // Electron apps are one logical thing sprawled over a
-        // main + zygote/helper process tree. Every proc walks its ppid
-        // chain to the nearest coalescing ancestor (flat loop — cheaper
-        // in bytes than a second subtree traversal) and folds its
-        // cpu/rss/gpu into it, hiding itself; the root surfaces if
-        // anything folded into it was visible. The hop cap bounds
-        // ppid cycles. Nested coalesce roots fold approximately
-        // (nearest ancestor wins per proc) — Electron doesn't nest.
-        for idx in 0..procs.len() {
-            let mut a = procs[idx].ppid;
-            let mut hops = 0u32;
-            let root = loop {
-                let Some(&pa) = pid_to_idx.get(&a) else { break None };
-                let pa = pa as usize;
-                if pa == idx { break None; } // self-cycle
-                if is_coalesced(procs[pa].display.as_slice()) { break Some(pa); }
-                a = procs[pa].ppid;
-                hops += 1;
-                if hops > 64 { break None; }
-            };
-            let Some(r) = root else { continue };
-            let k = &mut procs[idx];
-            let vis = k.visible();
-            let (cpu, rss, gpu) = (k.cpu, k.rss_kib, k.gpu.take());
-            k.set_visible(false);
-            k.cpu = 0.0;
-            k.rss_kib = 0;
-            let p = &mut procs[r];
-            if vis { p.set_visible(true); }
-            p.cpu += cpu;
-            p.rss_kib = p.rss_kib.saturating_add(rss);
-            if let Some(g) = gpu {
-                #[cfg(target_os = "macos")]
-                {
-                    let s0 = p.gpu.take().map(|h| h.sm_pct).unwrap_or(0);
-                    p.gpu = Some(GpuUsage { sm_pct: s0 + g.sm_pct });
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    let (s0, m0) = p.gpu.take()
-                        .map(|h| (h.sm_pct, h.mem_mib.get())).unwrap_or((0, 0));
-                    let mem = m0.saturating_add(g.mem_mib.get());
-                    // mem > 0: g.mem_mib is NonZero, so the sum is too.
-                    if let Some(mem_mib) = core::num::NonZeroU32::new(mem) {
-                        p.gpu = Some(GpuUsage { sm_pct: s0 + g.sm_pct, mem_mib });
-                    }
                 }
             }
         }
@@ -2180,12 +2199,26 @@ mod tests {
         });
     }
 
-    /// Coalesced apps render as one row: descendants' cpu/rss/gpu fold
-    /// into the root, the descendants disappear, and the root surfaces
-    /// because a member of its subtree was visible. The lowercase
-    /// "claude" CLI must NOT coalesce (case-sensitive match).
     #[test]
-    fn filter_coalesces_configured_subtrees() {
+    fn helper_name_match() {
+        assert!(is_helper_of(b"Code Helper", b"Code"));
+        assert!(is_helper_of(b"Code Helper (Renderer)", b"Code"));
+        assert!(!is_helper_of(b"Code", b"Code"));
+        assert!(!is_helper_of(b"CodeHelper", b"Code"));
+        assert!(!is_helper_of(b"Code Helper", b"Code Helper (Plugin)"));
+        assert!(!is_helper_of(b"claude", b"Code"));
+        assert!(!is_helper_of(b"Claude Helper (GPU)", b"claude"));
+    }
+
+    /// Electron helper subtrees fold into their app's row by name (no
+    /// per-app list): descendants named "<App> Helper*" sum cpu/rss/gpu
+    /// into the root and disappear, visible or not. A non-helper
+    /// descendant (a `claude` CLI under a plugin helper) never folds:
+    /// it keeps its own subtree, and the BFS reparents it to the app
+    /// root because its helper parent is hidden by the time the BFS
+    /// runs.
+    #[test]
+    fn filter_coalesces_helper_subtrees() {
         let _g = crate::arena::test_lock();
         crate::arena::scope(|frame| {
             #[cfg(target_os = "macos")]
@@ -2196,15 +2229,20 @@ mod tests {
                 mem_mib: core::num::NonZeroU32::new(64).unwrap(),
             });
 
-            let linear = frame.str("t/n1", |b| b.extend_from_slice(b"Linear")).into_small();
-            let cli = frame.str("t/n2", |b| b.extend_from_slice(b"claude")).into_small();
+            let code = frame.str("t/n1", |b| b.extend_from_slice(b"Code")).into_small();
+            let renderer =
+                frame.str("t/n2", |b| b.extend_from_slice(b"Code Helper (Renderer)")).into_small();
+            let plugin =
+                frame.str("t/n3", |b| b.extend_from_slice(b"Code Helper (Plugin)")).into_small();
+            let cli = frame.str("t/n4", |b| b.extend_from_slice(b"claude")).into_small();
             let mut procs: FVec<ProcInfo> = frame.vec("t/procs", 8);
             let _ = procs.push(ProcInfo { pid: 100, ppid: 1, cpu: 1.0, rss_kib: 100,
-                age_visible: ProcInfo::pack(10, false), gpu: None, display: linear });
-            let _ = procs.push(proc_info(200, 100, 3.0, true));   // helper (visible)
-            let _ = procs.push(proc_info(300, 200, 2.0, false));  // grandchild
-            procs.as_mut_slice()[2].gpu = gpu;
-            let _ = procs.push(ProcInfo { pid: 400, ppid: 1, cpu: 6.0, rss_kib: 100,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: code });
+            let _ = procs.push(ProcInfo { pid: 200, ppid: 100, cpu: 3.0, rss_kib: 1024,
+                age_visible: ProcInfo::pack(10, false), gpu, display: renderer });
+            let _ = procs.push(ProcInfo { pid: 300, ppid: 100, cpu: 2.0, rss_kib: 1024,
+                age_visible: ProcInfo::pack(10, false), gpu: None, display: plugin });
+            let _ = procs.push(ProcInfo { pid: 400, ppid: 300, cpu: 6.0, rss_kib: 100,
                 age_visible: ProcInfo::pack(10, true), gpu: None, display: cli });
             let _ = procs.push(proc_info(500, 400, 6.0, true));   // CLI child stays
 
@@ -2213,8 +2251,9 @@ mod tests {
             let prev = crate::map::Map::new(&[]);
             filter_with_children(frame, &mut procs, &prev, &mut next);
 
-            let pids: Vec<u32> = procs.iter().map(|p| p.pid).collect();
-            assert_eq!(pids, vec![100, 400, 500], "subtree folded; CLI untouched");
+            let pids: Vec<(u32, u32)> = procs.iter().map(|p| (p.pid, p.ppid)).collect();
+            assert_eq!(pids, vec![(100, 1), (400, 100), (500, 400)],
+                       "helpers folded; CLI reparented to the surfaced root");
             let root = &procs.as_slice()[0];
             assert_eq!(root.cpu, 6.0, "1 + 3 + 2");
             assert_eq!(root.rss_kib, 100 + 2 * 1024);
