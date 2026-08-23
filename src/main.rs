@@ -1842,7 +1842,8 @@ fn rfind_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 #[cfg(target_os = "macos")]
 fn is_idle_noise(comm: &[u8], args: &[&[u8]]) -> bool {
     let name = args.first().copied().map(basename).unwrap_or(comm);
-    ieq(name, b"corespotlightd")
+    icontains(name, b"1password")                  // incl. its helpers
+        || ieq(name, b"corespotlightd")
         || ieq(name, b"managedcorespotlightd")
         || ieq(name, b"mediaanalysisd")
         || ieq(name, b"contactsd")
