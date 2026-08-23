@@ -119,7 +119,11 @@ Break these when the data must outlive the producer (e.g. `ProcInfo.display` in 
 
 ## Binary-size lessons
 
-The production binary is a few tens of KB (`tests/footprint.rs` enforces the exact per-target thresholds; README's Footprint section has the table). Lessons that generalise — each is a rule, not a story:
+The production binary is a few tens of KB (`tests/footprint.rs` enforces the exact per-target thresholds; README's Footprint section has the table).
+
+**The thresholds are hard ceilings — never raise them.** They are the bonsai discipline made enforceable; a change that exceeds them must be restructured or paid for with offsetting shaves until it fits. Lowering them when binaries shrink is welcome. Measuring from a mac: the GNU cross-link path in `.cargo/link-and-strip.sh`'s Darwin branch reproduces CI's Linux binaries within a few dozen bytes, but the offset drifts with binutils/toolchain versions — re-derive it by stash-building the baseline commit, don't trust a remembered constant, and let CI arbitrate thin margins (branch first, ff-merge to main on green). Attribute costs with `*-linux-gnu-nm --size-sort` diffs on a `min-stack` build (`min`/`min-dbg` are stripped of section headers post-link, so `nm` sees nothing) plus `tools/inline-bytes` for LTO-merged umbrella symbols.
+
+Lessons that generalise — each is a rule, not a story:
 
 1. **Direct syscalls beat std when behaviour matches.** `available_parallelism` (~10 KB of cgroup parsers) → `sysconf(_SC_NPROCESSORS_ONLN)`. `read_to_string` (~1.5 KB) → `open`+`read`+`close` (~200 B). Keep stdlib for setup; syscalls in kernel-bound helpers.
 2. **Generics that sneak in tables.** `str::split_whitespace` pulls Unicode tables; `split_ascii_whitespace` doesn't. `{:?}` pulls grapheme tables; `{}` doesn't. ASCII case-fold: `b.eq_ignore_ascii_case(c)` not the `c…` form. `nm --size-sort` before/after every refactor.
