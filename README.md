@@ -61,10 +61,10 @@ MIG over hand-rolled Mach traps, and all working memory lives in one
 512 KB bump arena instead of the heap (the global allocator aborts).
 That is a great deal of `unsafe` atop kernel ABIs — raw syscall
 wrappers, pointer-bumping arena internals, manual VM reclaim. The
-arena's space-time profile for one macOS tick (peak 19 KB live of the
+arena's space-time profile for one macOS tick (peak 53 KB live of the
 512 KB reservation) looks like:
 
-![macOS arena allocation trace — one tick, 19 KB peak](arena-trace.svg)
+![macOS arena allocation trace — one tick, 53 KB peak](arena-trace.svg)
 
 Possibly there are bugs! All code was written by Claude Opus 4.6
 through 4.8, so the fun question is whether Fable will find any bugs

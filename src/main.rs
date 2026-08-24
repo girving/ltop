@@ -1198,9 +1198,11 @@ fn collect_procs<'a>(
     // pass 2 is `procs` itself. We can't use `frame.compact` (which
     // would also size `procs` exactly to its filled length) because
     // ProcInfo holds an FSmallStr and isn't `Copy`.
+    // `capacity` is a pid count, not bytes — the wrapper already divided
+    // by 4. +32 slots covers pids spawned between the query and the fill.
     let capacity = proc_listallpids_query();
     if capacity <= 0 { return (frame.vec("procs", 0), frame.vec("next", 0)); }
-    let n_slots = ((capacity as usize / 4) + 32) as u32;
+    let n_slots = (capacity as usize + 32) as u32;
     let mut procs: FVec<ProcInfo> = frame.vec("procs", n_slots);
     frame.scope(|sub| {
         let mut pids_raw = sub.zeros::<i32>("pids_raw", n_slots as usize);
