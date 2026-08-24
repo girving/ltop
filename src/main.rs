@@ -1849,6 +1849,7 @@ fn is_idle_noise(comm: &[u8], args: &[&[u8]]) -> bool {
         || ieq(name, b"managedcorespotlightd")
         || ieq(name, b"mediaanalysisd")
         || ieq(name, b"photolibraryd")
+        || ieq(name, b"photoanalysisd")
         || ieq(name, b"contactsd")
         || ieq(name, b"loginwindow")
         || ieq(name, b"netnewswire")
