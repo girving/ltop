@@ -1847,6 +1847,7 @@ fn is_idle_noise(comm: &[u8], args: &[&[u8]]) -> bool {
     icontains(name, b"1password")                  // incl. its helpers
         || ieq(name, b"corespotlightd")
         || ieq(name, b"managedcorespotlightd")
+        || ieq(name, b"spotlightknowledged")
         || ieq(name, b"mediaanalysisd")
         || ieq(name, b"photolibraryd")
         || ieq(name, b"photoanalysisd")
