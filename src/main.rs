@@ -51,7 +51,7 @@ use crate::arena::{FBuilder, FNest, FReserve, FSpan, FSmallStr, FVec, Frame};
 use crate::arena::FBox;
 #[cfg(any(target_os = "linux", not(test)))]
 use crate::arena::FStr;
-use crate::bytes::{f1_wide, ieq, name_hash, pad_left, pad_right, pad_zero, u32d};
+use crate::bytes::{f1_wide, has, ieq, name_hash, pad_left, pad_right, pad_zero, u32d};
 // `repeat`, `Instant` are only used by `fn run` (gated
 // `#[cfg(not(test))]`); gating the imports too avoids unused-import
 // warnings in the test build.
@@ -1847,7 +1847,7 @@ fn rfind_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// `bytes::name_hash` for the collision trade. Only genuine substring
 /// matches stay as code.
 #[cfg(target_os = "macos")]
-static IDLE_NOISE: [u32; 18] = [
+static IDLE_NOISE: [u32; 17] = [
     name_hash(b"corespotlightd"),
     name_hash(b"managedcorespotlightd"),
     name_hash(b"spotlightknowledged"),
@@ -1865,12 +1865,11 @@ static IDLE_NOISE: [u32; 18] = [
     name_hash(b"netnewswire"),
     name_hash(b"preview"),
     name_hash(b"things3"),
-    name_hash(b"1password"),
 ];
 #[cfg(target_os = "macos")]
 fn is_idle_noise(comm: &[u8], args: &[&[u8]]) -> bool {
     let name = args.first().copied().map(basename).unwrap_or(comm);
-    IDLE_NOISE.contains(&name_hash(name))
+    has(&IDLE_NOISE, name_hash(name))
         || icontains(name, b"1password")           // "1Password Extension Helper" etc.
 }
 #[cfg(not(target_os = "macos"))]
@@ -1902,7 +1901,7 @@ static NOISE: [u32; 18] = [
 /// cross-platform ones (Chrome helpers, AWS agents).
 fn is_noise(comm: &[u8], args: &[&[u8]]) -> bool {
     let name = args.first().copied().map(basename).unwrap_or(comm);
-    NOISE.contains(&name_hash(name))
+    has(&NOISE, name_hash(name))
         || icontains(name, b"chrome")              // Chrome and helpers
         || icontains(name, b"widget")              // macOS UI widgets
         || name.starts_with(b"com.apple.")         // Bundle-ID names

@@ -50,6 +50,14 @@ pub const fn name_hash(s: &[u8]) -> u32 {
     h
 }
 
+/// `t.contains(&h)` as a plain scan. `<[u32]>::contains` dispatches to
+/// the `SliceContains` integer specialisation — a `chunks_exact(16)`
+/// branchless OR-accumulate loop plus a remainder loop, ~104 B, built
+/// for autovectorising over large slices. Our tables are 17–18 entries.
+pub fn has(t: &[u32], h: u32) -> bool {
+    t.iter().any(|&x| x == h)
+}
+
 /// Byte-slice equivalent of `str::lines` (without the `\r\n`
 /// normalization — /proc doesn't emit CR). Splits on `\n`.
 pub fn split_lines(bytes: &[u8]) -> impl Iterator<Item = &[u8]> {
