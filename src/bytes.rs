@@ -30,6 +30,26 @@ pub fn ieq(a: &[u8], b: &[u8]) -> bool {
         && a.iter().zip(b).all(|(x, y)| x.eq_ignore_ascii_case(y))
 }
 
+/// 32-bit FNV-1a over `s` with ASCII case folded via `| 0x20` (A–Z → a–z;
+/// digits and lowercase are fixed points). `const`, so a table of
+/// `name_hash(b"literal")` is evaluated at compile time into plain `u32`s —
+/// no pointers, so no Mach-O rebase fixups and nothing in `__DATA`.
+///
+/// Membership in such a table is a fingerprint test, not an exact compare:
+/// a non-member collides with an `n`-entry table with probability
+/// `n / 2^32` (≈ 10⁻⁸ for our lists), deterministically per name. The
+/// callers gate cosmetic filtering only, so that trade buys ~24 B of
+/// call-site code plus the literal bytes per entry, against 4 B.
+pub const fn name_hash(s: &[u8]) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    let mut i = 0;
+    while i < s.len() {
+        h = (h ^ (s[i] | 0x20) as u32).wrapping_mul(0x0100_0193);
+        i += 1;
+    }
+    h
+}
+
 /// Byte-slice equivalent of `str::lines` (without the `\r\n`
 /// normalization — /proc doesn't emit CR). Splits on `\n`.
 pub fn split_lines(bytes: &[u8]) -> impl Iterator<Item = &[u8]> {
@@ -147,6 +167,13 @@ mod tests {
         String::from_utf8(v).unwrap()
     }
 
+    #[test] fn name_hash_folds_ascii_case_only() {
+        assert_eq!(name_hash(b"Finder"), name_hash(b"finder"));
+        assert_eq!(name_hash(b"THINGS3"), name_hash(b"things3"));
+        assert_ne!(name_hash(b"finder"), name_hash(b"finder "));
+        assert_ne!(name_hash(b"ab"), name_hash(b"ba"));
+        assert_ne!(name_hash(b""), name_hash(b"a"));
+    }
     #[test] fn u32d_basic()    { assert_eq!(put_to_string(&u32d(42)), "42"); }
     #[test] fn u32d_zero()     { assert_eq!(put_to_string(&u32d(0)), "0"); }
     #[test] fn pad_right_pads_with_spaces() {

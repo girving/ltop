@@ -51,7 +51,7 @@ use crate::arena::{FBuilder, FNest, FReserve, FSpan, FSmallStr, FVec, Frame};
 use crate::arena::FBox;
 #[cfg(any(target_os = "linux", not(test)))]
 use crate::arena::FStr;
-use crate::bytes::{f1_wide, ieq, pad_left, pad_right, pad_zero, u32d};
+use crate::bytes::{f1_wide, ieq, name_hash, pad_left, pad_right, pad_zero, u32d};
 // `repeat`, `Instant` are only used by `fn run` (gated
 // `#[cfg(not(test))]`); gating the imports too avoids unused-import
 // warnings in the test build.
@@ -1841,63 +1841,72 @@ fn rfind_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// threshold lets every one of them on screen permanently. Threading them
 /// through this predicate gates only the RSS path: CPU% (or GPU%) above
 /// threshold still surfaces them.
+///
+/// Exact (case-insensitive) names live in `IDLE_NOISE` as compile-time
+/// `name_hash` fingerprints — 4 B per entry, one lookup loop — see
+/// `bytes::name_hash` for the collision trade. Only genuine substring
+/// matches stay as code.
+#[cfg(target_os = "macos")]
+static IDLE_NOISE: [u32; 18] = [
+    name_hash(b"corespotlightd"),
+    name_hash(b"managedcorespotlightd"),
+    name_hash(b"spotlightknowledged"),
+    name_hash(b"spotlightknowledged.updater"),
+    name_hash(b"mediaanalysisd"),
+    name_hash(b"identityservicesd"),
+    name_hash(b"imdpersistenceagent"),
+    name_hash(b"sirittsd"),
+    name_hash(b"photolibraryd"),
+    name_hash(b"photoanalysisd"),
+    name_hash(b"sharingd"),
+    name_hash(b"contactsd"),
+    name_hash(b"finder"),
+    name_hash(b"loginwindow"),
+    name_hash(b"netnewswire"),
+    name_hash(b"preview"),
+    name_hash(b"things3"),
+    name_hash(b"1password"),
+];
 #[cfg(target_os = "macos")]
 fn is_idle_noise(comm: &[u8], args: &[&[u8]]) -> bool {
     let name = args.first().copied().map(basename).unwrap_or(comm);
-    icontains(name, b"1password")                  // incl. its helpers
-        || ieq(name, b"corespotlightd")
-        || ieq(name, b"managedcorespotlightd")
-        || icontains(name, b"spotlightknowledged") // incl. .updater
-        || ieq(name, b"mediaanalysisd")
-        || ieq(name, b"identityservicesd")
-        || ieq(name, b"imdpersistenceagent")
-        || ieq(name, b"sirittsd")
-        || ieq(name, b"photolibraryd")
-        || ieq(name, b"photoanalysisd")
-        || ieq(name, b"sharingd")
-        || ieq(name, b"contactsd")
-        || ieq(name, b"finder")
-        || ieq(name, b"loginwindow")
-        || ieq(name, b"netnewswire")
-        || ieq(name, b"preview")
-        || ieq(name, b"things3")
+    IDLE_NOISE.contains(&name_hash(name))
+        || icontains(name, b"1password")           // "1Password Extension Helper" etc.
 }
 #[cfg(not(target_os = "macos"))]
 fn is_idle_noise(_comm: &[u8], _args: &[&[u8]]) -> bool { false }
 
+/// Exact-name half of `is_noise`; fingerprint table as for `IDLE_NOISE`.
+static NOISE: [u32; 18] = [
+    name_hash(b"ssm-session-worker"),
+    name_hash(b"spotlight"),
+    name_hash(b"springboard"),
+    name_hash(b"newstoday2"),
+    name_hash(b"newsscoringservice"),
+    name_hash(b"screentimeagent"),
+    name_hash(b"appleaccountd"),
+    name_hash(b"siriinferenced"),
+    name_hash(b"siriactionsd"),
+    name_hash(b"callservicesd"),
+    name_hash(b"calaccessd"),
+    name_hash(b"amsengagementd"),
+    name_hash(b"chronod"),
+    name_hash(b"remindd"),
+    name_hash(b"routined"),
+    name_hash(b"textunderstandingd"),
+    name_hash(b"corespeechd"),
+    name_hash(b"characterpalette"),                // emoji picker's glyph cache
+];
+
+/// macOS daemons / UI processes that clutter the display, plus a few
+/// cross-platform ones (Chrome helpers, AWS agents).
 fn is_noise(comm: &[u8], args: &[&[u8]]) -> bool {
-    // macOS daemons / UI processes that clutter the display.
-    // Flat or-chain rather than `NOISE.iter().any(|s| ieq(name, s))` over
-    // a `const NOISE: &[&[u8]]` — the latter emits one 16-byte
-    // (ptr, len) slot per entry into __DATA,__const on Mach-O, each
-    // with a rebase fixup. An or-chain materializes each literal's
-    // (ptr, len) in registers at the call site (adrp+add+mov) with
-    // zero static-storage fixups. Same byte cost in __TEXT,__const
-    // for the string data; 16 × N bytes saved in __DATA,__const and
-    // N rebase entries dropped.
     let name = args.first().copied().map(basename).unwrap_or(comm);
-    icontains(name, b"chrome")                     // Chrome and helpers
+    NOISE.contains(&name_hash(name))
+        || icontains(name, b"chrome")              // Chrome and helpers
         || icontains(name, b"widget")              // macOS UI widgets
         || name.starts_with(b"com.apple.")         // Bundle-ID names
-        || name.starts_with(b"amazon-")              // AWS agent processes
-        || ieq(name, b"ssm-session-worker")
-        || ieq(name, b"spotlight")
-        || ieq(name, b"springboard")
-        || ieq(name, b"newstoday2")
-        || ieq(name, b"newsscoringservice")
-        || ieq(name, b"screentimeagent")
-        || ieq(name, b"appleaccountd")
-        || ieq(name, b"siriinferenced")
-        || ieq(name, b"siriactionsd")
-        || ieq(name, b"callservicesd")
-        || ieq(name, b"calaccessd")
-        || ieq(name, b"amsengagementd")
-        || ieq(name, b"chronod")
-        || ieq(name, b"remindd")
-        || ieq(name, b"routined")
-        || ieq(name, b"textunderstandingd")
-        || ieq(name, b"corespeechd")
-        || ieq(name, b"characterpalette")          // emoji picker's glyph cache
+        || name.starts_with(b"amazon-")            // AWS agent processes
         // BlastDoor content-parsing sandboxes (Messages/IDS/Hubble/…):
         // one suffix check covers the whole family.
         || name.ends_with(b"BlastDoorService")
@@ -2159,6 +2168,44 @@ mod tests {
             assert_eq!(p.cpu_bits(), bits, "set_visible must not disturb cpu bits");
         }
         assert!(Packed::new(true, 7).visible());
+    }
+
+    /// Every fingerprint table must be collision-free among its own
+    /// entries (a duplicate or a genuine FNV clash would silently merge
+    /// two names) and must not swallow everyday process names.
+    #[test]
+    fn noise_fingerprints_are_distinct_and_sane() {
+        fn distinct(t: &[u32]) {
+            for (i, a) in t.iter().enumerate() {
+                assert!(!t[i + 1..].contains(a), "duplicate fingerprint at {i}");
+            }
+        }
+        distinct(&NOISE);
+        #[cfg(target_os = "macos")]
+        distinct(&IDLE_NOISE);
+        for name in [&b"bash"[..], b"zsh", b"cargo", b"rustc", b"lean", b"lake", b"python3",
+                     b"node", b"cc1plus", b"clang", b"ld", b"launchd", b"kernel_task",
+                     b"WindowServer", b"Terminal", b"ssh", b"sshd", b"ltop", b"top", b""] {
+            assert!(!is_noise(name, &[]), "{:?} wrongly filtered", core::str::from_utf8(name));
+            assert!(!is_idle_noise(name, &[]), "{:?} wrongly idle-gated", core::str::from_utf8(name));
+        }
+    }
+
+    #[test]
+    fn noise_predicates_match_by_basename_case_insensitively() {
+        assert!(is_noise(b"", &[b"/usr/libexec/Chronod"]));
+        assert!(is_noise(b"remindd", &[]));
+        assert!(is_noise(b"", &[b"/x/IMDBlastDoorService"]));
+        assert!(is_noise(b"", &[b"com.apple.Foo"]));
+        assert!(!is_noise(b"", &[b"/usr/libexec/chronodx"]));  // exact, not prefix
+        #[cfg(target_os = "macos")]
+        {
+            assert!(is_idle_noise(b"", &[b"/usr/libexec/spotlightknowledged.updater"]));
+            assert!(is_idle_noise(b"", &[b"/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder"]));
+            assert!(is_idle_noise(b"sirittsd", &[]));
+            assert!(is_idle_noise(b"", &[b"/Applications/1Password.app/Contents/MacOS/1Password Extension Helper"]));
+            assert!(!is_idle_noise(b"", &[b"/usr/libexec/finderd"]));
+        }
     }
 
     #[test]
