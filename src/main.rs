@@ -963,18 +963,30 @@ fn is_helper_of(kid: &[u8], root: &[u8]) -> bool {
     kid.len() >= n + 7 && kid[..n] == *root && kid[n..n + 7] == *b" Helper"
 }
 
+/// Chromium embedders that skip the "<App> Helper" convention name
+/// their shard bundles "<Product> (Type)" with no name tie to the app
+/// — ChatGPT's are "Codex (Service)" / "Codex (Renderer)". The
+/// parenthesised process-type suffix alone marks the shard.
+fn is_shard_name(name: &[u8]) -> bool {
+    name.ends_with(b" (Renderer)") || name.ends_with(b" (Service)")
+}
+
 /// Nearest ancestor of `idx` that `idx` is named a helper of, via a
 /// flat ppid-chain walk (cheaper in bytes than a subtree traversal).
 /// The hop cap bounds ppid cycles (possible via a pid-reuse race
 /// during the sequential scan); a self-cycle needs no extra check
-/// because `is_helper_of(n, n)` is always false.
+/// because `is_helper_of(n, n)` is always false. A shard-named proc
+/// (per [`is_shard_name`]) folds into its direct parent without a
+/// walk: Chromium spawns every shard from the browser process, so the
+/// parent is the app root even when the names don't tie.
 fn coalesce_root(procs: &[ProcInfo], pid_to_idx: &Map<'_, u32>, idx: usize) -> Option<usize> {
     let name = procs[idx].display.as_slice();
+    let shard = is_shard_name(name);
     let mut a = procs[idx].ppid;
     for _ in 0..64 {
         let &pa = pid_to_idx.get(&a)?;
         let pa = pa as usize;
-        if is_helper_of(name, procs[pa].display.as_slice()) { return Some(pa); }
+        if shard || is_helper_of(name, procs[pa].display.as_slice()) { return Some(pa); }
         a = procs[pa].ppid;
     }
     None
@@ -983,8 +995,9 @@ fn coalesce_root(procs: &[ProcInfo], pid_to_idx: &Map<'_, u32>, idx: usize) -> O
 /// Coalesce Electron helper subtrees into their app's row — apps like
 /// Code or Linear are one logical thing sprawled over a main +
 /// zygote/helper process tree. Every helper-named proc (per
-/// [`is_helper_of`]) folds its cpu/rss/gpu into its app root, hiding
-/// itself; the root surfaces if anything folded in was visible.
+/// [`is_helper_of`], or [`is_shard_name`] for renamed shard bundles)
+/// folds its cpu/rss/gpu into its app root, hiding itself; the root
+/// surfaces if anything folded in was visible.
 /// Non-helpers never fold — a `claude` CLI spawned by a plugin helper
 /// keeps its own subtree. Runs BEFORE the visibility BFS, which makes
 /// that survivor's reparenting free: its helper parent is already
@@ -2265,6 +2278,56 @@ mod tests {
         assert!(!is_helper_of(b"Code Helper", b"Code Helper (Plugin)"));
         assert!(!is_helper_of(b"claude", b"Code"));
         assert!(!is_helper_of(b"Claude Helper (GPU)", b"claude"));
+    }
+
+    #[test]
+    fn shard_name_match() {
+        assert!(is_shard_name(b"Codex (Service)"));
+        assert!(is_shard_name(b"Codex (Renderer)"));
+        assert!(!is_shard_name(b"codex"));
+        assert!(!is_shard_name(b"ChatGPT"));
+        assert!(!is_shard_name(b"Codex (Renderer) x"));
+        assert!(!is_shard_name(b"mini_search.py"));
+    }
+
+    /// ChatGPT's Chromium shards are named "Codex (Service)" /
+    /// "Codex (Renderer)" — no name tie to the "ChatGPT" root — so they
+    /// fold into their direct parent by suffix alone. The lowercase
+    /// `codex` app-server has no suffix and keeps its own subtree.
+    #[test]
+    fn filter_coalesces_renamed_shards() {
+        let _g = crate::arena::test_lock();
+        crate::arena::scope(|frame| {
+            let app = frame.str("t/n1", |b| b.extend_from_slice(b"ChatGPT")).into_small();
+            let service =
+                frame.str("t/n2", |b| b.extend_from_slice(b"Codex (Service)")).into_small();
+            let renderer =
+                frame.str("t/n3", |b| b.extend_from_slice(b"Codex (Renderer)")).into_small();
+            let cli = frame.str("t/n4", |b| b.extend_from_slice(b"codex")).into_small();
+            let mut procs: FVec<ProcInfo> = frame.vec("t/procs", 8);
+            let _ = procs.push(ProcInfo { pid: 100, ppid: 1, cpu: 0.4, rss_kib: 100,
+                age_visible: ProcInfo::pack(10, false), gpu: None, display: app });
+            let _ = procs.push(ProcInfo { pid: 200, ppid: 100, cpu: 2.4, rss_kib: 1024,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: service });
+            let _ = procs.push(ProcInfo { pid: 300, ppid: 100, cpu: 2.3, rss_kib: 1024,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: renderer });
+            let _ = procs.push(ProcInfo { pid: 400, ppid: 100, cpu: 0.5, rss_kib: 100,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: cli });
+            let _ = procs.push(proc_info(500, 400, 50.0, true));  // mini_search.py
+
+            let mut next: FVec<(u32, Packed)> = frame.vec("t/next", 8);
+            for p in procs.iter() { let _ = next.push((p.pid, Packed::new(false, 0))); }
+            let prev = crate::map::Map::new(&[]);
+            filter_with_children(frame, &mut procs, &prev, &mut next);
+
+            let pids: Vec<(u32, u32)> = procs.iter().map(|p| (p.pid, p.ppid)).collect();
+            assert_eq!(pids, vec![(100, 1), (400, 100), (500, 400)],
+                       "shards folded; codex subtree intact");
+            let root = &procs.as_slice()[0];
+            assert_eq!(root.cpu, 0.4 + 2.4 + 2.3);
+            assert_eq!(root.rss_kib, 100 + 2 * 1024);
+            assert!(root.visible(), "visible shard surfaces the root");
+        });
     }
 
     /// Electron helper subtrees fold into their app's row by name (no
