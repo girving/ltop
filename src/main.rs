@@ -1860,7 +1860,7 @@ fn rfind_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// `bytes::name_hash` for the collision trade. Only genuine substring
 /// matches stay as code.
 #[cfg(target_os = "macos")]
-static IDLE_NOISE: [u32; 17] = [
+static IDLE_NOISE: [u32; 19] = [
     name_hash(b"corespotlightd"),
     name_hash(b"managedcorespotlightd"),
     name_hash(b"spotlightknowledged"),
@@ -1878,6 +1878,8 @@ static IDLE_NOISE: [u32; 17] = [
     name_hash(b"netnewswire"),
     name_hash(b"preview"),
     name_hash(b"things3"),
+    name_hash(b"avconferenced"),
+    name_hash(b"applespell"),
 ];
 #[cfg(target_os = "macos")]
 fn is_idle_noise(comm: &[u8], args: &[&[u8]]) -> bool {
@@ -2215,6 +2217,7 @@ mod tests {
             assert!(is_idle_noise(b"", &[b"/usr/libexec/spotlightknowledged.updater"]));
             assert!(is_idle_noise(b"", &[b"/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder"]));
             assert!(is_idle_noise(b"sirittsd", &[]));
+            assert!(is_idle_noise(b"", &[b"/System/Library/Services/AppleSpell.service/Contents/MacOS/AppleSpell"]));
             assert!(is_idle_noise(b"", &[b"/Applications/1Password.app/Contents/MacOS/1Password Extension Helper"]));
             assert!(!is_idle_noise(b"", &[b"/usr/libexec/finderd"]));
         }
