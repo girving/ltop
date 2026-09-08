@@ -53,9 +53,9 @@ const MIN_BINARY: &str = "target/aarch64-apple-darwin/min/ltop";
 // gcc-driver-flag differences); CI's GNU output is authoritative and
 // this test is where it gets enforced.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-const MAX_SIZE: u64 = 235 * 1024 / 10;       // 23.5 KB = 24,064 B
+const MAX_SIZE: u64 = 236 * 1024 / 10;       // 23.6 KB = 24,166 B
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-const MAX_SIZE: u64 = 218 * 1024 / 10;       // 21.8 KB = 22,323 B
+const MAX_SIZE: u64 = 219 * 1024 / 10;       // 21.9 KB = 22,425 B
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 const MAX_SIZE: u64 = 326 * 1024 / 10;       // 32.6 KB = 33,382 B
 

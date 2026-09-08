@@ -978,7 +978,10 @@ fn is_shard_name(name: &[u8]) -> bool {
 /// because `is_helper_of(n, n)` is always false. A shard-named proc
 /// (per [`is_shard_name`]) folds into its direct parent without a
 /// walk: Chromium spawns every shard from the browser process, so the
-/// parent is the app root even when the names don't tie.
+/// parent is the app root even when the names don't tie. A `lean
+/// --server` folds into the `lake serve` that spawned it: the pair is
+/// one language server, and the file workers then hang directly off
+/// `lake serve`, one level shallower.
 fn coalesce_root(procs: &[ProcInfo], pid_to_idx: &Map<'_, u32>, idx: usize) -> Option<usize> {
     let name = procs[idx].display.as_slice();
     let shard = is_shard_name(name);
@@ -986,7 +989,15 @@ fn coalesce_root(procs: &[ProcInfo], pid_to_idx: &Map<'_, u32>, idx: usize) -> O
     for _ in 0..64 {
         let &pa = pid_to_idx.get(&a)?;
         let pa = pa as usize;
-        if shard || is_helper_of(name, procs[pa].display.as_slice()) { return Some(pa); }
+        let pname = procs[pa].display.as_slice();
+        // Parent test first: it fails on nearly every hop, so the
+        // kid's name is only compared under a `lake serve`.
+        if shard
+            || is_helper_of(name, pname)
+            || (ieq(pname, b"lake serve") && ieq(name, b"lean --server"))
+        {
+            return Some(pa);
+        }
         a = procs[pa].ppid;
     }
     None
@@ -997,7 +1008,8 @@ fn coalesce_root(procs: &[ProcInfo], pid_to_idx: &Map<'_, u32>, idx: usize) -> O
 /// zygote/helper process tree. Every helper-named proc (per
 /// [`is_helper_of`], or [`is_shard_name`] for renamed shard bundles)
 /// folds its cpu/rss/gpu into its app root, hiding itself; the root
-/// surfaces if anything folded in was visible.
+/// surfaces if anything folded in was visible. `lean --server` under
+/// `lake serve` folds the same way (see [`coalesce_root`]).
 /// Non-helpers never fold — a `claude` CLI spawned by a plugin helper
 /// keeps its own subtree. Runs BEFORE the visibility BFS, which makes
 /// that survivor's reparenting free: its helper parent is already
@@ -2332,6 +2344,49 @@ mod tests {
             assert_eq!(root.cpu, 0.4 + 2.4 + 2.3);
             assert_eq!(root.rss_kib, 100 + 2 * 1024);
             assert!(root.visible(), "visible shard surfaces the root");
+        });
+    }
+
+    /// `lake serve` -> `lean --server` -> file workers is one language
+    /// server split over two processes. The `lean --server` folds into
+    /// `lake serve` (cpu/rss summed, row hidden) and the BFS hangs the
+    /// always-visible workers directly off `lake serve`. A `lean
+    /// --server` whose parent isn't `lake serve` keeps its own row.
+    #[test]
+    fn filter_coalesces_lean_server_into_lake_serve() {
+        let _g = crate::arena::test_lock();
+        crate::arena::scope(|frame| {
+            let lake = frame.str("t/n1", |b| b.extend_from_slice(b"lake serve")).into_small();
+            let server =
+                frame.str("t/n2", |b| b.extend_from_slice(b"lean --server")).into_small();
+            let worker =
+                frame.str("t/n3", |b| b.extend_from_slice(b"lean AKS/Graph.lean")).into_small();
+            let code = frame.str("t/n4", |b| b.extend_from_slice(b"Code")).into_small();
+            let server2 =
+                frame.str("t/n5", |b| b.extend_from_slice(b"lean --server")).into_small();
+            let mut procs: FVec<ProcInfo> = frame.vec("t/procs", 8);
+            let _ = procs.push(ProcInfo { pid: 100, ppid: 1, cpu: 0.1, rss_kib: 100,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: lake });
+            let _ = procs.push(ProcInfo { pid: 200, ppid: 100, cpu: 0.5, rss_kib: 1024,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: server });
+            let _ = procs.push(ProcInfo { pid: 300, ppid: 200, cpu: 90.0, rss_kib: 4096,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: worker });
+            let _ = procs.push(ProcInfo { pid: 400, ppid: 1, cpu: 1.0, rss_kib: 100,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: code });
+            let _ = procs.push(ProcInfo { pid: 500, ppid: 400, cpu: 0.5, rss_kib: 1024,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: server2 });
+
+            let mut next: FVec<(u32, Packed)> = frame.vec("t/next", 8);
+            for p in procs.iter() { let _ = next.push((p.pid, Packed::new(false, 0))); }
+            let prev = crate::map::Map::new(&[]);
+            filter_with_children(frame, &mut procs, &prev, &mut next);
+
+            let pids: Vec<(u32, u32)> = procs.iter().map(|p| (p.pid, p.ppid)).collect();
+            assert_eq!(pids, vec![(100, 1), (300, 100), (400, 1), (500, 400)],
+                       "server folded into lake serve; worker reparented; Code's server kept");
+            let lake = &procs.as_slice()[0];
+            assert_eq!(lake.cpu, 0.1 + 0.5);
+            assert_eq!(lake.rss_kib, 100 + 1024);
         });
     }
 
