@@ -27,8 +27,8 @@ the cover library into the link.
 
 | Target | Binary | Startup RSS | Stable RSS |
 |---|---:|---:|---:|
-| Linux x86_64 | ≤ 23.6 KB | ~44 KB | ~44 KB |
-| Linux aarch64 | ≤ 21.9 KB | ~44 KB | ~44 KB |
+| Linux x86_64 | ≤ 23.7 KB | ~44 KB | ~44 KB |
+| Linux aarch64 | ≤ 22.0 KB | ~44 KB | ~44 KB |
 | macOS arm64 † | ≤ 32.6 KB | ~944 KB | ≤ 224 KB |
 
 † macOS `phys_footprint` peaks transiently at ~944 KB during dyld init

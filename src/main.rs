@@ -978,29 +978,37 @@ fn is_shard_name(name: &[u8]) -> bool {
 /// because `is_helper_of(n, n)` is always false. A shard-named proc
 /// (per [`is_shard_name`]) folds into its direct parent without a
 /// walk: Chromium spawns every shard from the browser process, so the
-/// parent is the app root even when the names don't tie. A `lean
-/// --server` folds into the `lake serve` that spawned it: the pair is
-/// one language server, and the file workers then hang directly off
-/// `lake serve`, one level shallower.
+/// parent is the app root even when the names don't tie. Lean's
+/// server chain folds upward too: `lean --server` into the `lake
+/// serve` that spawned it (the pair is one language server), and
+/// `lake serve` into a `lean-mcp` above it, so the file workers hang
+/// off the outermost row. A match doesn't end the walk: it continues
+/// from the root with the root's own name, so a chain resolves to its
+/// outermost root in one call and nothing folds into a row that was
+/// hidden earlier in the scan.
 fn coalesce_root(procs: &[ProcInfo], pid_to_idx: &Map<'_, u32>, idx: usize) -> Option<usize> {
-    let name = procs[idx].display.as_slice();
-    let shard = is_shard_name(name);
+    let mut root = None;
+    let mut name = procs[idx].display.as_slice();
+    let mut shard = is_shard_name(name);
     let mut a = procs[idx].ppid;
     for _ in 0..64 {
-        let &pa = pid_to_idx.get(&a)?;
+        let Some(&pa) = pid_to_idx.get(&a) else { break };
         let pa = pa as usize;
         let pname = procs[pa].display.as_slice();
-        // Parent test first: it fails on nearly every hop, so the
-        // kid's name is only compared under a `lake serve`.
+        // Parent tests first: they fail on nearly every hop, so the
+        // kid's name is only compared under a matching parent.
         if shard
             || is_helper_of(name, pname)
             || (ieq(pname, b"lake serve") && ieq(name, b"lean --server"))
+            || (ieq(pname, b"lean-mcp") && ieq(name, b"lake serve"))
         {
-            return Some(pa);
+            root = Some(pa);
+            name = pname;
+            shard = is_shard_name(name);
         }
         a = procs[pa].ppid;
     }
-    None
+    root
 }
 
 /// Coalesce Electron helper subtrees into their app's row — apps like
@@ -1008,8 +1016,8 @@ fn coalesce_root(procs: &[ProcInfo], pid_to_idx: &Map<'_, u32>, idx: usize) -> O
 /// zygote/helper process tree. Every helper-named proc (per
 /// [`is_helper_of`], or [`is_shard_name`] for renamed shard bundles)
 /// folds its cpu/rss/gpu into its app root, hiding itself; the root
-/// surfaces if anything folded in was visible. `lean --server` under
-/// `lake serve` folds the same way (see [`coalesce_root`]).
+/// surfaces if anything folded in was visible. The Lean server chain
+/// folds the same way (see [`coalesce_root`]).
 /// Non-helpers never fold — a `claude` CLI spawned by a plugin helper
 /// keeps its own subtree. Runs BEFORE the visibility BFS, which makes
 /// that survivor's reparenting free: its helper parent is already
@@ -2388,6 +2396,49 @@ mod tests {
             assert_eq!(lake.cpu, 0.1 + 0.5);
             assert_eq!(lake.rss_kib, 100 + 1024);
         });
+    }
+
+    /// `lean-mcp` -> `lake serve` -> `lean --server` -> worker folds
+    /// transitively to `lean-mcp`, in either scan order: the middle
+    /// rows hide, their cpu/rss land in the outermost row, and the
+    /// worker hangs directly off `lean-mcp`.
+    #[test]
+    fn filter_coalesces_lean_chain_transitively() {
+        let _g = crate::arena::test_lock();
+        for reversed in [false, true] {
+            crate::arena::scope(|frame| {
+                let mcp = frame.str("t/n1", |b| b.extend_from_slice(b"lean-mcp")).into_small();
+                let lake = frame.str("t/n2", |b| b.extend_from_slice(b"lake serve")).into_small();
+                let server =
+                    frame.str("t/n3", |b| b.extend_from_slice(b"lean --server")).into_small();
+                let worker = frame.str("t/n4", |b| b.extend_from_slice(b"lean A.lean")).into_small();
+                let mut procs: FVec<ProcInfo> = frame.vec("t/procs", 8);
+                let _ = procs.push(ProcInfo { pid: 100, ppid: 1, cpu: 0.25, rss_kib: 10,
+                    age_visible: ProcInfo::pack(10, true), gpu: None, display: mcp });
+                let (a, b) = (
+                    ProcInfo { pid: 200, ppid: 100, cpu: 0.5, rss_kib: 100,
+                        age_visible: ProcInfo::pack(10, true), gpu: None, display: lake },
+                    ProcInfo { pid: 300, ppid: 200, cpu: 1.0, rss_kib: 1000,
+                        age_visible: ProcInfo::pack(10, true), gpu: None, display: server },
+                );
+                let (a, b) = if reversed { (b, a) } else { (a, b) };
+                let _ = procs.push(a);
+                let _ = procs.push(b);
+                let _ = procs.push(ProcInfo { pid: 400, ppid: 300, cpu: 90.0, rss_kib: 4096,
+                    age_visible: ProcInfo::pack(10, true), gpu: None, display: worker });
+
+                let mut next: FVec<(u32, Packed)> = frame.vec("t/next", 8);
+                for p in procs.iter() { let _ = next.push((p.pid, Packed::new(false, 0))); }
+                let prev = crate::map::Map::new(&[]);
+                filter_with_children(frame, &mut procs, &prev, &mut next);
+
+                let pids: Vec<(u32, u32)> = procs.iter().map(|p| (p.pid, p.ppid)).collect();
+                assert_eq!(pids, vec![(100, 1), (400, 100)], "reversed={reversed}");
+                let root = &procs.as_slice()[0];
+                assert_eq!(root.cpu, 0.25 + 0.5 + 1.0, "reversed={reversed}");
+                assert_eq!(root.rss_kib, 10 + 100 + 1000, "reversed={reversed}");
+            });
+        }
     }
 
     /// Electron helper subtrees fold into their app's row by name (no
