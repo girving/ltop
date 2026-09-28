@@ -1880,7 +1880,7 @@ fn rfind_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// `bytes::name_hash` for the collision trade. Only genuine substring
 /// matches stay as code.
 #[cfg(target_os = "macos")]
-static IDLE_NOISE: [u32; 20] = [
+static IDLE_NOISE: [u32; 24] = [
     name_hash(b"corespotlightd"),
     name_hash(b"managedcorespotlightd"),
     name_hash(b"spotlightknowledged"),
@@ -1901,6 +1901,10 @@ static IDLE_NOISE: [u32; 20] = [
     name_hash(b"avconferenced"),
     name_hash(b"applespell"),
     name_hash(b"usernotificationcenter"),
+    name_hash(b"notificationcenter"),
+    name_hash(b"controlcenter"),
+    name_hash(b"suggestd"),
+    name_hash(b"textthumbnailextension"),
 ];
 #[cfg(target_os = "macos")]
 fn is_idle_noise(comm: &[u8], args: &[&[u8]]) -> bool {
@@ -2241,6 +2245,8 @@ mod tests {
             assert!(is_idle_noise(b"", &[b"/System/Library/Services/AppleSpell.service/Contents/MacOS/AppleSpell"]));
             assert!(is_idle_noise(b"", &[b"/Applications/1Password.app/Contents/MacOS/1Password Extension Helper"]));
             assert!(is_idle_noise(b"", &[b"/System/Library/CoreServices/UserNotificationCenter.app/Contents/MacOS/UserNotificationCenter"]));
+            assert!(is_idle_noise(b"", &[b"/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter"]));
+            assert!(is_idle_noise(b"", &[b"/System/Library/ExtensionKit/Extensions/TextThumbnailExtension.appex/Contents/MacOS/TextThumbnailExtension"]));
             assert!(!is_idle_noise(b"", &[b"/usr/libexec/finderd"]));
         }
     }
