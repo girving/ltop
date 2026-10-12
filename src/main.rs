@@ -982,7 +982,10 @@ fn is_shard_name(name: &[u8]) -> bool {
 /// server chain folds upward too: `lean --server` into the `lake
 /// serve` that spawned it (the pair is one language server), and
 /// `lake serve` into a `lean-mcp` above it, so the file workers hang
-/// off the outermost row. A match doesn't end the walk: it continues
+/// off the outermost row. A booted Simulator device is a private
+/// `launchd_sim` running hundreds of iOS/watchOS daemons; everything
+/// below it folds into that one row, whatever its name. A match
+/// doesn't end the walk: it continues
 /// from the root with the root's own name, so a chain resolves to its
 /// outermost root in one call and nothing folds into a row that was
 /// hidden earlier in the scan.
@@ -999,6 +1002,7 @@ fn coalesce_root(procs: &[ProcInfo], pid_to_idx: &Map<'_, u32>, idx: usize) -> O
         // kid's name is only compared under a matching parent.
         if shard
             || is_helper_of(name, pname)
+            || (cfg!(target_os = "macos") && ieq(pname, b"launchd_sim"))
             || (ieq(pname, b"lake serve") && ieq(name, b"lean --server"))
             || (ieq(pname, b"lean-mcp") && ieq(name, b"lake serve"))
         {
@@ -2445,6 +2449,38 @@ mod tests {
                 assert_eq!(root.rss_kib, 10 + 100 + 1000, "reversed={reversed}");
             });
         }
+    }
+
+    /// A Simulator device's daemons fold into its `launchd_sim` at any
+    /// depth and whatever their names: an invisible root surfaces as
+    /// one row carrying the summed cpu/rss.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn filter_coalesces_launchd_sim_subtree() {
+        let _g = crate::arena::test_lock();
+        crate::arena::scope(|frame| {
+            let sim = frame.str("t/n1", |b| b.extend_from_slice(b"launchd_sim")).into_small();
+            let bbd = frame.str("t/n2", |b| b.extend_from_slice(b"backboardd")).into_small();
+            let xpc = frame.str("t/n3", |b| b.extend_from_slice(b"ThumbnailsAgent")).into_small();
+            let mut procs: FVec<ProcInfo> = frame.vec("t/procs", 8);
+            let _ = procs.push(ProcInfo { pid: 100, ppid: 1, cpu: 0.0, rss_kib: 10,
+                age_visible: ProcInfo::pack(10, false), gpu: None, display: sim });
+            let _ = procs.push(ProcInfo { pid: 200, ppid: 100, cpu: 0.5, rss_kib: 150_000,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: bbd });
+            let _ = procs.push(ProcInfo { pid: 300, ppid: 200, cpu: 5.0, rss_kib: 1000,
+                age_visible: ProcInfo::pack(10, true), gpu: None, display: xpc });
+
+            let mut next: FVec<(u32, Packed)> = frame.vec("t/next", 8);
+            for p in procs.iter() { let _ = next.push((p.pid, Packed::new(false, 0))); }
+            let prev = crate::map::Map::new(&[]);
+            filter_with_children(frame, &mut procs, &prev, &mut next);
+
+            let pids: Vec<(u32, u32)> = procs.iter().map(|p| (p.pid, p.ppid)).collect();
+            assert_eq!(pids, vec![(100, 1)]);
+            let root = &procs.as_slice()[0];
+            assert_eq!(root.cpu, 0.5 + 5.0);
+            assert_eq!(root.rss_kib, 10 + 150_000 + 1000);
+        });
     }
 
     /// Electron helper subtrees fold into their app's row by name (no
