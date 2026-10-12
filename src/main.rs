@@ -1888,7 +1888,7 @@ fn rfind_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// `bytes::name_hash` for the collision trade. Only genuine substring
 /// matches stay as code.
 #[cfg(target_os = "macos")]
-static IDLE_NOISE: [u32; 24] = [
+static IDLE_NOISE: [u32; 25] = [
     name_hash(b"corespotlightd"),
     name_hash(b"managedcorespotlightd"),
     name_hash(b"spotlightknowledged"),
@@ -1913,6 +1913,7 @@ static IDLE_NOISE: [u32; 24] = [
     name_hash(b"controlcenter"),
     name_hash(b"suggestd"),
     name_hash(b"textthumbnailextension"),
+    name_hash(b"reportcrash"),
 ];
 #[cfg(target_os = "macos")]
 fn is_idle_noise(comm: &[u8], args: &[&[u8]]) -> bool {
@@ -2255,6 +2256,7 @@ mod tests {
             assert!(is_idle_noise(b"", &[b"/System/Library/CoreServices/UserNotificationCenter.app/Contents/MacOS/UserNotificationCenter"]));
             assert!(is_idle_noise(b"", &[b"/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter"]));
             assert!(is_idle_noise(b"", &[b"/System/Library/ExtensionKit/Extensions/TextThumbnailExtension.appex/Contents/MacOS/TextThumbnailExtension"]));
+            assert!(is_idle_noise(b"", &[b"/System/Library/CoreServices/ReportCrash", b"agent"]));
             assert!(!is_idle_noise(b"", &[b"/usr/libexec/finderd"]));
         }
     }
