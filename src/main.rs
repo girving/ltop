@@ -1020,7 +1020,9 @@ fn coalesce_root(procs: &[ProcInfo], pid_to_idx: &Map<'_, u32>, idx: usize) -> O
 /// zygote/helper process tree. Every helper-named proc (per
 /// [`is_helper_of`], or [`is_shard_name`] for renamed shard bundles)
 /// folds its cpu/rss/gpu into its app root, hiding itself; the root
-/// surfaces if anything folded in was visible. The Lean server chain
+/// surfaces if anything folded in was visible — a `launchd_sim`
+/// whenever anything folds in, since its row is the only view of the
+/// Simulator device's work. The Lean server chain
 /// folds the same way (see [`coalesce_root`]).
 /// Non-helpers never fold — a `claude` CLI spawned by a plugin helper
 /// keeps its own subtree. Runs BEFORE the visibility BFS, which makes
@@ -1042,7 +1044,9 @@ fn coalesce_helpers(procs: &mut [ProcInfo], pid_to_idx: &Map<'_, u32>) {
         k.cpu = 0.0;
         k.rss_kib = 0;
         let p = &mut procs[r];
-        if vis { p.set_visible(true); }
+        if vis || (cfg!(target_os = "macos") && ieq(p.display.as_slice(), b"launchd_sim")) {
+            p.set_visible(true);
+        }
         p.cpu += cpu;
         p.rss_kib = p.rss_kib.saturating_add(rss);
         if let Some(g) = gpu {
@@ -2452,8 +2456,9 @@ mod tests {
     }
 
     /// A Simulator device's daemons fold into its `launchd_sim` at any
-    /// depth and whatever their names: an invisible root surfaces as
-    /// one row carrying the summed cpu/rss.
+    /// depth and whatever their names, and the root surfaces as one
+    /// row carrying the summed cpu/rss even when no daemon would have
+    /// shown on its own.
     #[cfg(target_os = "macos")]
     #[test]
     fn filter_coalesces_launchd_sim_subtree() {
@@ -2465,10 +2470,10 @@ mod tests {
             let mut procs: FVec<ProcInfo> = frame.vec("t/procs", 8);
             let _ = procs.push(ProcInfo { pid: 100, ppid: 1, cpu: 0.0, rss_kib: 10,
                 age_visible: ProcInfo::pack(10, false), gpu: None, display: sim });
-            let _ = procs.push(ProcInfo { pid: 200, ppid: 100, cpu: 0.5, rss_kib: 150_000,
-                age_visible: ProcInfo::pack(10, true), gpu: None, display: bbd });
-            let _ = procs.push(ProcInfo { pid: 300, ppid: 200, cpu: 5.0, rss_kib: 1000,
-                age_visible: ProcInfo::pack(10, true), gpu: None, display: xpc });
+            let _ = procs.push(ProcInfo { pid: 200, ppid: 100, cpu: 0.25, rss_kib: 1000,
+                age_visible: ProcInfo::pack(10, false), gpu: None, display: bbd });
+            let _ = procs.push(ProcInfo { pid: 300, ppid: 200, cpu: 0.5, rss_kib: 2000,
+                age_visible: ProcInfo::pack(10, false), gpu: None, display: xpc });
 
             let mut next: FVec<(u32, Packed)> = frame.vec("t/next", 8);
             for p in procs.iter() { let _ = next.push((p.pid, Packed::new(false, 0))); }
@@ -2478,8 +2483,8 @@ mod tests {
             let pids: Vec<(u32, u32)> = procs.iter().map(|p| (p.pid, p.ppid)).collect();
             assert_eq!(pids, vec![(100, 1)]);
             let root = &procs.as_slice()[0];
-            assert_eq!(root.cpu, 0.5 + 5.0);
-            assert_eq!(root.rss_kib, 10 + 150_000 + 1000);
+            assert_eq!(root.cpu, 0.25 + 0.5);
+            assert_eq!(root.rss_kib, 10 + 1000 + 2000);
         });
     }
 
