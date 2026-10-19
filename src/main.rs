@@ -1,5 +1,8 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
+// `eh_personality` lang item in `platform::rt`; see the comment there.
+#![cfg_attr(not(test), feature(lang_items))]
+#![cfg_attr(not(test), allow(internal_features))]
 // In test builds the `extern "C" fn main` entry point (and thus `run` and
 // everything it transitively calls) is gated out, leaving most of the
 // binary's code unreachable. Silence the resulting dead-code noise so real

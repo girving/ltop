@@ -220,14 +220,21 @@ mod rt {
         crate::syscall::exit_group(134)
     }
 
-    // The precompiled `liballoc.rlib` that ships with the stable toolchain was
-    // built with `panic=unwind`, so it references `rust_eh_personality`.
-    // We've set `panic=abort`, so no unwinding ever happens — the symbol just
-    // needs to resolve. The nightly `build-std` path (used by the `./ltop`
-    // wrapper) rebuilds alloc with panic=abort and drops the reference, so
-    // this stub is only load-bearing on the plain `cargo build --release`.
-    #[unsafe(no_mangle)]
-    pub extern "C" fn rust_eh_personality() {}
+    // The precompiled `liballoc.rlib` in the nightly sysroot was built with
+    // `panic=unwind`, so its unwind tables reference the personality
+    // routine. We've set `panic=abort`, so no unwinding ever happens — the
+    // symbol just needs to resolve. The `build-std` path (`cargo ltop` /
+    // `cargo stack`) rebuilds alloc with panic=abort and drops the
+    // reference, so this is only load-bearing on the plain
+    // `cargo build --release` / `cargo test` builds.
+    //
+    // Declared as the `eh_personality` lang item rather than a
+    // `#[no_mangle]` symbol: rustc picks the symbol name, which tracks
+    // the sysroot's. Since nightly 2026-10-18 that name is the mangled
+    // `__rustc::rust_eh_personality`, which a plain `rust_eh_personality`
+    // no longer satisfies (rust-lld on x86_64 Linux rejects the link).
+    #[lang = "eh_personality"]
+    extern "C" fn rust_eh_personality() {}
 
     // LLVM's aarch64-apple-darwin codegen emits `bzero` calls for
     // zero-fills of small-to-medium anonymous storage (stack arrays,
