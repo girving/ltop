@@ -34,10 +34,10 @@ const MIN_BINARY: &str = "target/aarch64-apple-darwin/min/ltop";
 
 // Thresholds in BYTES, rounded up to the nearest 0.1 KB. Each number
 // is the integer floor of (display KB × 1024); ~100 B of LTO/linker
-// drift fits within the rounding gap. Today's actual sizes (post
-// 2026-07-08 audit fixes):
-//   Linux x86_64   ~24,343 B → 23.8 KB
-//   Linux aarch64  ~22,896 B → 22.5 KB  (arm64 fixed-width insns +
+// drift fits within the rounding gap. Today's actual sizes (with
+// COMMAND labels, label.rs: +1,274 B x86_64, +1,720 B aarch64):
+//   Linux x86_64   25,479 B → 24.9 KB  (GNU ld 2.44, nightly 2026-10-18)
+//   Linux aarch64  24,200 B → 23.7 KB  (arm64 fixed-width insns +
 //                                        no compiler_builtins memcpy
 //                                        come out smaller than x86_64
 //                                        on our control-flow shape)
@@ -53,9 +53,9 @@ const MIN_BINARY: &str = "target/aarch64-apple-darwin/min/ltop";
 // gcc-driver-flag differences); CI's GNU output is authoritative and
 // this test is where it gets enforced.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-const MAX_SIZE: u64 = 237 * 1024 / 10;       // 23.7 KB = 24,268 B
+const MAX_SIZE: u64 = 249 * 1024 / 10;       // 24.9 KB = 25,497 B
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-const MAX_SIZE: u64 = 220 * 1024 / 10;       // 22.0 KB = 22,528 B
+const MAX_SIZE: u64 = 237 * 1024 / 10;       // 23.7 KB = 24,268 B
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 const MAX_SIZE: u64 = 326 * 1024 / 10;       // 32.6 KB = 33,382 B
 
