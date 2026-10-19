@@ -24,6 +24,7 @@ mod platform;
 mod sort;
 #[macro_use]
 mod twrite;
+mod label;
 // `src/start.rs` is our `_start` replacement. Active only on the
 // libc-free production build (the `cargo ltop` / `cargo stack`
 // aliases, which set `--cfg=libc_free` in rustflags). Other Linux
@@ -458,7 +459,9 @@ pub(crate) unsafe fn parse_args(argc: i32, argv: *const *const u8) -> u64 {
     }
     let mut flags: u64 = 0;
     if platform::has_arg(argc, argv, b"--once") { flags |= FLAG_ONCE; }
-    flags
+    // The label directory fd (negative if absent) rides in the upper
+    // half; envp is only safe to read now, before the stack is reclaimed.
+    flags | (unsafe { label::open_dir(argc, argv) } as u64) << 32
 }
 
 /// Traditional `extern "C" fn main` entry. Only compiled on targets
@@ -558,6 +561,7 @@ pub unsafe extern "C" fn mac_run_then_exit(flags: u64, pid: i32) -> ! {
 #[cfg(not(test))]
 pub(crate) fn run(flags: u64) {
     let once = flags & FLAG_ONCE != 0;
+    let label_dir = (flags >> 32) as i32;
     // `_SC_CLK_TCK` is ABI-fixed at 100 regardless of kernel HZ — no
     // sysconf roundtrip needed (a libc wrapper that touches TLS for
     // errno, and the production build has no TLS). The page size is
@@ -593,7 +597,7 @@ pub(crate) fn run(flags: u64) {
         // arena-svg workflow consumes. An instrumented build isn't a
         // production binary; it runs unsandboxed.
         #[cfg(all(target_os = "linux", libc_free, not(feature = "arena-trace")))]
-        sandbox::install();
+        sandbox::install(label_dir);
 
         // Two adjacent cross-tick FSpans, both rotated each iteration via
         // `init.replace2`. Order matters: gpu_prev sits below prev in the
@@ -694,6 +698,7 @@ pub(crate) fn run(flags: u64) {
                 // (repr(C) makes it stable; the assert makes it loud).
                 const { assert!(core::mem::offset_of!(ProcInfo, pid) == 0) };
                 map::sort_by_u32_key(&mut procs);
+                label::apply(label_dir, tick, &mut procs);
 
                 let la = load_avg(num_cpus);
                 let mi = mem_info(tick);
@@ -1463,7 +1468,7 @@ fn collect_procs<'a>(
     // duration of this call.
     let mut dirent_buf: FBox<[u64; platform::DIRENT_BUF_U64S]> =
         frame.alloc_zeroed("proc/dirent_buf");
-    let Some(mut pid_dir) = platform::PidDir::open(c"/proc", &mut dirent_buf)
+    let Some(mut pid_dir) = platform::PidDir::at(syscall::AT_FDCWD, c"/proc", &mut dirent_buf[..])
         else { return (frame.vec("procs", 0), frame.vec("next", 0)); };
     let proc_fd = pid_dir.fd();
     let procs_stub: FSpan<ProcInfo> = frame.span("procs", |b| {

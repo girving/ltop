@@ -36,8 +36,9 @@
 //!    by *path*. seccomp BPF can't deref the path pointer, so
 //!    without Landlock a corrupted process could still
 //!    `openat("/etc/shadow", ...)` even with read-only flags. The
-//!    ruleset allows read-file + read-dir under `/proc` and nothing
-//!    else. ltop requires Landlock at install time — kernels older
+//!    ruleset allows read-file + read-dir under `/proc`, plus
+//!    read-file + read-dir + remove-file under the label directory
+//!    (`label.rs`; stale labels are unlinked), and nothing else. ltop requires Landlock at install time — kernels older
 //!    than 5.13, or kernels built with `CONFIG_SECURITY_LANDLOCK=n`,
 //!    abort with a clear stderr message rather than silently
 //!    falling back to seccomp-only. Graceful fallback would save
@@ -204,6 +205,8 @@ const DENY_ACTION: u32 = SECCOMP_RET_TRAP;
 ///                       /proc dirfd; Landlock confines the path).
 ///   getpid            - collect_procs needs to know our own pid
 ///                       to filter ourselves out of the tree.
+///   unlinkat          - removing stale label files; Landlock grants
+///                       remove-file beneath the label directory only.
 ///   restart_syscall   - substituted by the kernel when a syscall
 ///                       that was interrupted by a signal running NO
 ///                       handler resumes: get_signal() returns false
@@ -232,6 +235,7 @@ const ALLOW_DIRECT: &[u32] = &[
     39,   // getpid
     217,  // getdents64
     219,  // restart_syscall
+    263,  // unlinkat
     228,  // clock_gettime
     231,  // exit_group
     #[cfg(feature = "sandbox-trap")]
@@ -272,6 +276,7 @@ const ALLOW_DIRECT: &[u32] = &[
     172,  // getpid
     61,   // getdents64
     128,  // restart_syscall
+    35,   // unlinkat
     113,  // clock_gettime
     94,   // exit_group
     #[cfg(feature = "sandbox-trap")]
@@ -447,6 +452,7 @@ static PROG: [SockFilter; PROG_LEN] = build_prog();
 
 const LANDLOCK_ACCESS_FS_READ_FILE: u64 = 1 << 2; // 4
 const LANDLOCK_ACCESS_FS_READ_DIR: u64 = 1 << 3; // 8
+const LANDLOCK_ACCESS_FS_REMOVE_FILE: u64 = 1 << 5; // 32
 /// Every Landlock ABI-v1 filesystem access right (EXECUTE, WRITE_FILE,
 /// READ_*, REMOVE_*, MAKE_* — bits 0..=12, include/uapi/linux/landlock.h).
 /// Handled-but-not-granted rights are denied by the LSM, so handling
@@ -497,7 +503,9 @@ struct LandlockPathBeneathAttr {
 /// In `sandbox-trap` mode this also installs a SIGSYS handler so
 /// blocked syscalls report their nr to stderr instead of dying
 /// silently.
-pub fn install() {
+/// `label_dir` is the label directory's fd (`label::open_dir`), or
+/// negative when there is none.
+pub fn install(label_dir: i32) {
     #[cfg(feature = "sandbox-trap")]
     install_sigsys_handler();
 
@@ -507,7 +515,7 @@ pub fn install() {
     let r = unsafe { syscall::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
     if r < 0 { fail(b'1', r); }
 
-    install_landlock();
+    install_landlock(label_dir);
     install_seccomp();
 }
 
@@ -561,7 +569,7 @@ fn install_seccomp() {
 /// ruleset fd. `landlock_add_rule(rs, PATH_BENEATH, &rule, 0)`.
 /// `landlock_restrict_self(rs, 0)` applies the ruleset to this
 /// thread + descendants.
-fn install_landlock() {
+fn install_landlock(label_dir: i32) {
     // The ruleset_attr struct is just a single u64 of access bits.
     // Inlining a u64 here saves the type definition and lets the
     // pointer cast collapse.
@@ -588,10 +596,21 @@ fn install_landlock() {
     let proc_fd = syscall::open_cstr(c"/proc", O_PATH | syscall::O_CLOEXEC);
     if proc_fd < 0 { fail(b'4', proc_fd as i64); } // open(/proc, O_PATH)
 
-    let rule = LandlockPathBeneathAttr {
-        allowed_access: LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR,
-        parent_fd: proc_fd,
-    };
+    add_rule(rs, proc_fd, LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR);
+    syscall::close(proc_fd);
+    if label_dir >= 0 {
+        add_rule(rs, label_dir, LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR
+                                | LANDLOCK_ACCESS_FS_REMOVE_FILE);
+    }
+
+    let r = syscall::landlock_restrict_self(rs, 0);
+    syscall::close(rs);
+    if r < 0 { fail(b'6', r); } // landlock_restrict_self
+}
+
+/// Grant `access` beneath the directory `parent_fd` names.
+fn add_rule(rs: i32, parent_fd: i32, access: u64) {
+    let rule = LandlockPathBeneathAttr { allowed_access: access, parent_fd };
     // SAFETY: `rule` is a valid `landlock_path_beneath_attr`; kernel
     // reads exactly its packed 12 bytes (we pass repr(C) which is
     // 16 with 4 trailing pad — the kernel ignores the pad).
@@ -603,12 +622,7 @@ fn install_landlock() {
             0,
         )
     };
-    syscall::close(proc_fd);
     if r < 0 { fail(b'5', r); } // landlock_add_rule(PATH_BENEATH)
-
-    let r = syscall::landlock_restrict_self(rs, 0);
-    syscall::close(rs);
-    if r < 0 { fail(b'6', r); } // landlock_restrict_self
 }
 
 // ── sandbox-trap: SIGSYS handler ───────────────────────────────────────────
