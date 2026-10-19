@@ -17,6 +17,7 @@ Features:
 - CPU and memory threshold filtering
 - Interpreter-aware: shows script names for python, ruby, node, etc.
 - Color-coded by CPU (blue) and memory (red) pressure
+- Programs can set their own COMMAND text (see [Labels](#labels))
 - Works on Linux and macOS
 
 ## Footprint
@@ -107,3 +108,42 @@ To build-and-run straight from the repo without installing, use the
 cargo ltop                 # build + run
 cargo ltop -- --once       # pass args after --
 ```
+
+## Labels
+
+A program can choose what ltop shows as its COMMAND by writing a
+one-line file. Only ltop reads the file; `ps`, `pgrep` and everything
+else still see the real command line.
+
+- **Where.** `$XDG_CACHE_HOME/ltop/status/<pid>.<start>`, or
+  `~/.cache/ltop/status/<pid>.<start>` when `XDG_CACHE_HOME` is unset.
+  Create the directory with mode 0700 if it's missing.
+- **Name.** `<pid>` is your process id and `<start>` your process's
+  start time, both as decimal integers:
+  - Linux: field 22 of `/proc/<pid>/stat` (start time in clock ticks
+    since boot).
+  - macOS: `kp_proc.p_starttime` from `sysctl` `KERN_PROC_PID`, as
+    `tv_sec * 1000000 + tv_usec`. `proc_pidinfo(PROC_PIDTBSDINFO)`'s
+    `pbi_start_tvsec` and `pbi_start_tvusec` give the same value.
+
+  The pair names one process, so a file left behind by a dead process
+  can't label whoever gets its pid next.
+- **Content.** One line of UTF-8. ltop reads at most 200 bytes, stops
+  at the first newline, and drops control characters.
+- **Writing.** Write a temporary file in the same directory, named so
+  it doesn't look like `<digits>.<digits>` (say `.<pid>.<start>.tmp`),
+  then rename it onto the label, so ltop never reads half a line.
+  Rewrite at most about once a second, and only when the text changes.
+- **Cleaning up.** Delete your file when you exit, including on
+  SIGTERM and SIGINT. At start-up, delete any files whose process is
+  gone or whose start time differs. ltop deletes those too when it
+  sees them.
+
+ltop lists the directory on every refresh. A label replaces only the
+COMMAND text: CPU, memory, GPU and the row's place in the tree stay as
+they were, and a label doesn't make a quiet process visible.
+
+Limits: ltop opens the directory when it starts, so if the directory
+doesn't exist yet, labels show up from the next ltop start. On Linux
+the sandbox lets ltop read and delete files in that directory and
+nowhere else outside `/proc`.

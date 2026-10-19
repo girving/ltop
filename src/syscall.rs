@@ -65,13 +65,23 @@ pub const CLOCK_MONOTONIC: i32 = libc::CLOCK_MONOTONIC as i32;
 pub const O_RDONLY: i32 = 0;
 pub const O_WRONLY: i32 = 1;
 pub const O_RDWR: i32 = 2;
+#[cfg(not(target_os = "macos"))]
 pub const O_CLOEXEC: i32 = 0o2000000;
+#[cfg(not(target_os = "macos"))]
+pub const O_NONBLOCK: i32 = 0o4000;
+// The BSD ABI macOS inherits numbers these differently (<sys/fcntl.h>).
+#[cfg(target_os = "macos")]
+pub const O_CLOEXEC: i32 = 0x0100_0000;
+#[cfg(target_os = "macos")]
+pub const O_NONBLOCK: i32 = 0x4;
+#[cfg(target_os = "macos")]
+pub const O_DIRECTORY: i32 = 0x0010_0000;
 
 // O_DIRECTORY is *not* asm-generic: Linux's arm/arm64 uapi headers
 // override it to octal 040000, while x86_64 (and the rest of
 // asm-generic) uses 0200000. Passing the wrong bit gives -EINVAL
 // from openat, not -ENOTDIR, so it's easy to misdiagnose.
-#[cfg(any(not(target_arch = "aarch64"), not(target_os = "linux")))]
+#[cfg(all(not(target_arch = "aarch64"), not(target_os = "macos")))]
 pub const O_DIRECTORY: i32 = 0o200000;
 #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
 pub const O_DIRECTORY: i32 = 0o40000;
@@ -151,6 +161,7 @@ mod linux {
         pub const SYS_OPENAT: i64 = 257;
         pub const SYS_SCHED_GETAFFINITY: i64 = 204;
         pub const SYS_GETDENTS64: i64 = 217;
+        pub const SYS_UNLINKAT: i64 = 263;
         pub const SYS_PRCTL: i64 = 157;
         pub const SYS_SECCOMP: i64 = 317;
         pub const SYS_RT_SIGACTION: i64 = 13;
@@ -267,6 +278,7 @@ mod linux {
         pub const SYS_OPENAT: i64 = 56;
         pub const SYS_SCHED_GETAFFINITY: i64 = 123;
         pub const SYS_GETDENTS64: i64 = 61;
+        pub const SYS_UNLINKAT: i64 = 35;
         pub const SYS_PRCTL: i64 = 167;
         pub const SYS_SECCOMP: i64 = 277;
         pub const SYS_RT_SIGACTION: i64 = 134;
@@ -391,7 +403,9 @@ mod darwin {
         pub const SYS_GETTIMEOFDAY:i64 = 116;
         pub const SYS_SYSCTL:      i64 = 202;
         pub const SYS_PROC_INFO:   i64 = 336;
+        pub const SYS_GETDIRENTRIES64: i64 = 344;
         pub const SYS_OPENAT:      i64 = 463;
+        pub const SYS_UNLINKAT:    i64 = 472;
 
         // Mach traps (negative syscall numbers in x16 route through the
         // Mach-trap table instead of the BSD-syscall table).
@@ -862,13 +876,30 @@ pub fn getpid() -> i32 {
     { unsafe { libc::getpid() } }
 }
 
-/// Linux-only: `getdents64` streams directory entries into `buf`. Used
-/// by `platform::PidDir` for /proc scanning. macOS uses a different
-/// path (libproc) and doesn't reach this.
-#[cfg(target_os = "linux")]
+/// Stream directory entries into `buf`; used by `platform::PidDir`.
+/// Linux `getdents64`; on macOS `getdirentries64`, whose fourth
+/// argument is a required out-pointer for the directory offset
+/// (xnu copies it out unconditionally — NULL gives EFAULT).
 #[inline]
 pub unsafe fn getdents64(fd: i32, buf: *mut u8, len: usize) -> i64 {
-    linux::syscall3(linux::SYS_GETDENTS64, fd as i64, buf as i64, len as i64)
+    #[cfg(target_os = "linux")]
+    { linux::syscall3(linux::SYS_GETDENTS64, fd as i64, buf as i64, len as i64) }
+    #[cfg(target_os = "macos")]
+    {
+        let mut pos: i64 = 0;
+        darwin::syscall4(darwin::SYS_GETDIRENTRIES64, fd as i64, buf as i64, len as i64,
+                         &mut pos as *mut i64 as i64)
+    }
+}
+
+/// `unlinkat(dirfd, path, 0)`: remove the file `path` names relative
+/// to `dirfd`. Returns 0 or `-errno`.
+#[inline]
+pub unsafe fn unlinkat(dirfd: i32, path: *const u8) -> i64 {
+    #[cfg(target_os = "linux")]
+    { linux::syscall3(linux::SYS_UNLINKAT, dirfd as i64, path as i64, 0) }
+    #[cfg(target_os = "macos")]
+    { darwin::syscall3(darwin::SYS_UNLINKAT, dirfd as i64, path as i64, 0) }
 }
 
 /// Linux-only: `sched_getaffinity(0, size, set)` fills `set` with the
@@ -1251,6 +1282,45 @@ mod tests {
         // First record's d_reclen lives at byte offset 16 (u16 LE).
         let reclen = u16::from_le_bytes([buf[16], buf[17]]);
         assert!((24..=buf.len() as u16).contains(&reclen), "weird reclen={reclen}");
+    }
+
+    /// getdents64 (getdirentries64 on macOS) + unlinkat on a scratch
+    /// directory: the listing matches std's, and unlinkat removes a file.
+    #[test]
+    fn getdents64_and_unlinkat_match_std() {
+        let d = std::env::temp_dir().join(format!("ltop-getdents-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        for n in ["12.34", "b", "a-long-enough-name-to-pad-the-record"] {
+            std::fs::write(d.join(n), "").unwrap();
+        }
+        let dir = std::fs::File::open(&d).unwrap();
+        let mut buf = [0u64; 512];
+        let n = unsafe { getdents64(dir.as_raw_fd(), buf.as_mut_ptr() as *mut u8, 4096) };
+        assert!(n > 0, "getdents64 returned {n}");
+        #[cfg(target_os = "linux")] const NAME: usize = 19;
+        #[cfg(target_os = "macos")] const NAME: usize = 21;
+        let bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, n as usize) };
+        let mut names = Vec::new();
+        let mut pos = 0;
+        while pos < bytes.len() {
+            let reclen = u16::from_ne_bytes([bytes[pos + 16], bytes[pos + 17]]) as usize;
+            let name = &bytes[pos + NAME..pos + reclen];
+            names.push(String::from_utf8(name[..name.iter().position(|&b| b == 0).unwrap()].to_vec()).unwrap());
+            pos += reclen;
+        }
+        names.retain(|n| n != "." && n != "..");
+        names.sort();
+        let mut want: Vec<String> = std::fs::read_dir(&d).unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+        want.sort();
+        assert_eq!(names, want);
+        let r = unsafe { unlinkat(dir.as_raw_fd(), b"b\0".as_ptr()) };
+        assert_eq!(r, 0);
+        assert!(!d.join("b").exists());
+        let r = unsafe { unlinkat(dir.as_raw_fd(), b"b\0".as_ptr()) };
+        assert_eq!(r, -2, "second unlink should be -ENOENT");
+        std::fs::remove_dir_all(&d).unwrap();
     }
 
     /// SYS_SCHED_GETAFFINITY returns bytes written (> 0) and at least

@@ -46,62 +46,60 @@ pub fn getpid() -> u32 {
 
 // ── Directory iteration ──────────────────────────────────────────────────────
 
-/// Iterator over numeric entries in a directory, yielding PID as u32.
-/// Non-numeric entries (like `/proc/stat`, `/proc/meminfo`) are skipped.
+/// Iterator over the numeric entries of a directory: `/proc` (named
+/// `<pid>`) and the label directory (named `<pid>.<start>`, see
+/// `label.rs`). Yields the leading number; a `.<digits>` suffix lands in
+/// `start` (`NO_START` when absent) and `name` points at the entry's
+/// NUL-terminated name for `openat`/`unlinkat`. Any other name is skipped.
 ///
 /// Implemented via direct `open` + `getdents64` syscalls rather than
 /// `opendir`/`readdir` — opendir allocates the `DIR` struct via
 /// calloc, which drags the entire malloc chain (~8 KB) into the binary.
 /// Raw getdents64 needs no heap; the getdents64 buffer is supplied by
-/// the caller (expected to be an arena-allocated `[u64; DIRENT_BUF_U64S]`),
-/// keeping the 4 KB of page-aligned scratch off the tick's stack frame.
-///
-/// Linux-only: macOS scans PIDs via libproc's `proc_listallpids` and
-/// never touches this path.
+/// the caller (an arena-allocated `[u64]`), keeping the scratch off the
+/// tick's stack frame.
 #[cfg(target_os = "linux")]
 pub const DIRENT_BUF_U64S: usize = 512; // 4 KB — comfortably holds ~100+ entries per syscall.
 
-#[cfg(target_os = "linux")]
+pub const NO_START: u64 = u64::MAX;
+
 pub struct PidDir<'a> {
     fd: i32,
     buf_filled: usize, // bytes of `buf` containing valid dirent data
     buf_pos: usize,    // current read offset within `buf`
-    buf: &'a mut [u64; DIRENT_BUF_U64S],
+    buf: &'a mut [u64],
+    pub start: u64,
+    pub name: *const u8,
 }
 
-// Layout the kernel writes at the start of each entry in the buffer.
-// Followed by d_name bytes starting at offset DIRENT_NAME_OFFSET, NUL-
-// terminated. See `linux_dirent64` in <linux/dirent.h>.
+// Each record the kernel writes starts with `d_ino: u64`, an 8-byte
+// offset, then `d_reclen: u16` at byte 16 — Linux `linux_dirent64`
+// (<linux/dirent.h>) and Darwin's 64-bit-inode `struct direntry`
+// (<sys/dirent.h>) agree that far. The NUL-terminated name follows
+// `d_type: u8` (Linux) or `d_namlen: u16, d_type: u8` (Darwin).
 #[cfg(target_os = "linux")]
-#[repr(C)]
-struct LinuxDirent64 {
-    d_ino: u64,
-    d_off: i64,
-    d_reclen: u16,
-    d_type: u8,
-}
-#[cfg(target_os = "linux")]
-const DIRENT_NAME_OFFSET: usize = 19; // size_of::<LinuxDirent64>() packed
+const DIRENT_NAME_OFFSET: usize = 19;
+#[cfg(target_os = "macos")]
+const DIRENT_NAME_OFFSET: usize = 21;
 
-#[cfg(target_os = "linux")]
 impl<'a> PidDir<'a> {
-    pub fn open(path: &core::ffi::CStr, buf: &'a mut [u64; DIRENT_BUF_U64S]) -> Option<Self> {
-        let fd = unsafe {
-            syscall::open(path.as_ptr() as *const u8,
-                          syscall::O_RDONLY | syscall::O_DIRECTORY | syscall::O_CLOEXEC)
-        };
+    /// `openat(dirfd, path)` as a directory. A negative `dirfd` fails
+    /// the open (EBADF), so callers needn't check it first.
+    pub fn at(dirfd: i32, path: &core::ffi::CStr, buf: &'a mut [u64]) -> Option<Self> {
+        let fd = syscall::openat_cstr(dirfd, path,
+                                      syscall::O_RDONLY | syscall::O_DIRECTORY | syscall::O_CLOEXEC);
         if fd < 0 { return None; }
-        Some(Self { fd, buf_filled: 0, buf_pos: 0, buf })
+        Some(Self { fd, buf_filled: 0, buf_pos: 0, buf, start: NO_START, name: core::ptr::null() })
     }
 
     /// File descriptor of the open directory — usable as the `dirfd`
     /// argument to `openat(2)` so callers avoid re-opening `/proc`.
+    #[cfg(target_os = "linux")]
     pub fn fd(&self) -> i32 { self.fd }
 
     fn buf_ptr(&self) -> *const u8 { self.buf.as_ptr() as *const u8 }
 }
 
-#[cfg(target_os = "linux")]
 impl Iterator for PidDir<'_> {
     type Item = u32;
     fn next(&mut self) -> Option<u32> {
@@ -109,43 +107,51 @@ impl Iterator for PidDir<'_> {
             // Refill when we've consumed the previous batch.
             if self.buf_pos >= self.buf_filled {
                 let n = unsafe {
-                    syscall::getdents64(
-                        self.fd,
-                        self.buf.as_mut_ptr() as *mut u8,
-                        core::mem::size_of_val::<[u64; DIRENT_BUF_U64S]>(self.buf),
-                    )
+                    syscall::getdents64(self.fd, self.buf.as_mut_ptr() as *mut u8, self.buf.len() * 8)
                 };
                 if n <= 0 { return None; }  // 0 = EOF, <0 = error
                 self.buf_filled = n as usize;
                 self.buf_pos = 0;
             }
 
-            // SAFETY: kernel writes complete dirent records; d_reclen is
-            // the byte-width of this entry including d_name. The buffer is
-            // u64-aligned so the u64 header fields are naturally aligned.
+            // SAFETY: kernel writes complete dirent records; d_reclen
+            // (u16 at byte 16) is the byte-width of this entry including
+            // d_name. The buffer is u64-aligned, so the field is aligned.
             let ent_ptr = unsafe { self.buf_ptr().add(self.buf_pos) };
-            let ent = unsafe { &*(ent_ptr as *const LinuxDirent64) };
-            let reclen = ent.d_reclen as usize;
+            let reclen = unsafe { *(ent_ptr.add(16) as *const u16) } as usize;
             let name_ptr = unsafe { ent_ptr.add(DIRENT_NAME_OFFSET) };
             self.buf_pos += reclen;
 
-            // Parse the NUL-terminated name as a pid; skip non-numeric.
-            let mut pid: u32 = 0;
+            // Parse `<digits>` or `<digits>.<digits>`; skip anything else.
+            let mut n: u64 = 0;
+            let mut head = NO_START;
             let mut i = 0;
-            let mut ok = true;
-            loop {
+            let ok = loop {
                 let b = unsafe { *name_ptr.add(i) };
-                if b == 0 { break; }
-                if !b.is_ascii_digit() { ok = false; break; }
-                pid = pid.wrapping_mul(10).wrapping_add((b - b'0') as u32);
+                if b == 0 { break i > 0; }
+                if b == b'.' && head == NO_START && i > 0 {
+                    head = n;
+                    n = 0;
+                } else if b.is_ascii_digit() {
+                    n = n.wrapping_mul(10).wrapping_add((b - b'0') as u64);
+                } else {
+                    break false;
+                }
                 i += 1;
+            };
+            if ok {
+                self.name = name_ptr;
+                if head == NO_START {
+                    self.start = NO_START;
+                    return Some(n as u32);
+                }
+                self.start = n;
+                return Some(head as u32);
             }
-            if ok && i > 0 { return Some(pid); }
         }
     }
 }
 
-#[cfg(target_os = "linux")]
 impl Drop for PidDir<'_> {
     fn drop(&mut self) { syscall::close(self.fd); }
 }

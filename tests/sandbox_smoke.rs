@@ -27,6 +27,45 @@ const CHILD_ENV: &str = "LTOP_SANDBOX_TEST_CHILD";
 const TEST_NAME: &str = "sandbox_install_then_seccomp_field_is_filter_mode";
 const CHILD_ENV_SIGSYS: &str = "LTOP_SANDBOX_TEST_CHILD_SIGSYS";
 const CHILD_ENV_SLEEP: &str = "LTOP_SANDBOX_TEST_CHILD_SLEEP";
+const CHILD_ENV_LABEL: &str = "LTOP_SANDBOX_TEST_CHILD_LABEL";
+
+/// The label directory under the sandbox: reading and unlinking files
+/// beneath it works, and the same operations outside it are refused.
+#[test]
+fn sandbox_allows_label_dir_and_nothing_beside_it() {
+    if let Ok(root) = env::var(CHILD_ENV_LABEL) {
+        use ltop::syscall::{self, AT_FDCWD, O_DIRECTORY, O_RDONLY};
+        let c = |p: String| std::ffi::CString::new(p).unwrap();
+        let (dir, outside) = (c(format!("{root}/status")), c(format!("{root}/outside")));
+        let fd = syscall::open_cstr(&dir, O_RDONLY | O_DIRECTORY);
+        if fd < 0 { syscall::exit_group(19); }
+        ltop::sandbox::install(fd);
+        let f = syscall::openat_cstr(fd, c"1.2", O_RDONLY);
+        let mut buf = [0u8; 8];
+        if f < 0 || syscall::read_buf(f, &mut buf) != 5 { syscall::exit_group(20); }
+        if unsafe { syscall::unlinkat(fd, c"1.2".as_ptr() as *const u8) } != 0 { syscall::exit_group(21); }
+        if syscall::open_cstr(&outside, O_RDONLY) >= 0 { syscall::exit_group(22); }
+        if unsafe { syscall::unlinkat(AT_FDCWD, outside.as_ptr() as *const u8) } >= 0 {
+            syscall::exit_group(23);
+        }
+        syscall::exit_group(0);
+    }
+    let root = env::temp_dir().join(format!("ltop-sandbox-label-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("status")).unwrap();
+    std::fs::write(root.join("status/1.2"), "hello").unwrap();
+    std::fs::write(root.join("outside"), "secret").unwrap();
+    let exe = env::current_exe().expect("current_exe");
+    let status = Command::new(&exe)
+        .env(CHILD_ENV_LABEL, &root)
+        .args(["--exact", "sandbox_allows_label_dir_and_nothing_beside_it"])
+        .status()
+        .expect("failed to spawn child");
+    assert!(status.success(), "child exit status: {status:?}");
+    assert!(!root.join("status/1.2").exists(), "unlink inside the label dir didn't happen");
+    assert!(root.join("outside").exists(), "unlink outside the label dir wasn't refused");
+    std::fs::remove_dir_all(&root).unwrap();
+}
 
 /// The deny action, end to end: a child installs the sandbox and then
 /// issues a syscall that is deliberately startup-only (absent from the
@@ -36,7 +75,7 @@ const CHILD_ENV_SLEEP: &str = "LTOP_SANDBOX_TEST_CHILD_SLEEP";
 #[test]
 fn sandbox_denied_syscall_kills_with_sigsys() {
     if env::var(CHILD_ENV_SIGSYS).is_ok() {
-        ltop::sandbox::install();
+        ltop::sandbox::install(-1);
         let mut set = [0u64; 16];
         let _ = ltop::syscall::sched_getaffinity_self(&mut set);
         // Reached ⇒ the filter let a denied syscall through.
@@ -65,7 +104,7 @@ fn sandbox_denied_syscall_kills_with_sigsys() {
 #[test]
 fn sandbox_survives_stop_cont_during_nanosleep() {
     if env::var(CHILD_ENV_SLEEP).is_ok() {
-        ltop::sandbox::install();
+        ltop::sandbox::install(-1);
         // ~3 s of 100 ms nanosleeps so the parent's STOP lands in one.
         let ts = ltop::syscall::Timespec { tv_sec: 0, tv_nsec: 100_000_000 };
         for _ in 0..30 {
@@ -116,7 +155,7 @@ fn sandbox_install_then_seccomp_field_is_filter_mode() {
 fn run_child_check() -> ! {
     // Install the sandbox. Any failure here `exit_group(2)`s on its
     // own, which the parent will see as `!status.success()`.
-    ltop::sandbox::install();
+    ltop::sandbox::install(-1);
 
     // Read /proc/thread-self/status with sandbox-allowed syscalls
     // only. NOT /proc/self/status: the test harness runs each test
